@@ -28,15 +28,26 @@ Built on [Ettin](https://huggingface.co/jhu-clsp/ettin-encoder-1b) encoders (400
 
 Beta 2 adds generated rule-application data, counterfactual minimal pairs and deciding-rule evidence (see `docs/RELEASE_PLAN.md`).
 
-## Layout (planned)
+## Layout
 
 ```
-horopter/     model, adapters, server (typed wire format)
-training/     joint trainer, adapter and evidence trainers, data recipe
-eval/         benchmark scorers
-docs/         release plan, wire format, reports
+horopter/     model, packing, losses, runtime (adapters), evidence, abstention, server (typed wire format)
+training/     joint trainer, adapter / evidence trainers, abstention head fit, data builders, recipes/beta2.md
+eval/         benchmark scorers (E37 bench, E40 rule evals) and the HTTP client
+scripts/      export_hf.py: training checkpoint -> HF layout
+tests/        parity against the research code
+docs/         release plan, porting notes (docs/PORTING.md)
 assets/       theme art (public domain)
 ```
+
+```python
+import horopter
+m = horopter.load("path/to/horopter-0.4B")      # the exported HF layout
+out = m.answer("Refunds within 30 days. The lamp was bought 12 days ago.",
+               {"q": {"type": "noul", "instructions": "Is a refund allowed?"}}, evidence=True)
+```
+
+Server: `python -m horopter.server --model path/to/horopter-0.4B --port 8420`.
 
 ## Credits
 
