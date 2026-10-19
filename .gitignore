@@ -3,6 +3,10 @@ __pycache__/
 *.safetensors
 *.pt
 outputs/
+# data directories are never committed; training/data/ holds the data builders (code), not data
 data/
+!training/data/
+training/data/*.jsonl
+training/data/*.jsonl.gz
 logs/
 .venv/

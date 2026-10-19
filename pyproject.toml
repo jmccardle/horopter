@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "horopter"
+version = "0.1.0"
+description = "Horopter: an encoder-only typed-decision model with relation, evidence spans and abstention"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.1",
+    "transformers>=4.48",
+    "safetensors",
+    "numpy",
+    "fastapi",
+    "uvicorn",
+    "pydantic>=2",
+]
+
+[project.optional-dependencies]
+server = ["fastapi", "uvicorn", "pydantic>=2"]
+training = ["pandas", "scipy"]
+hub = ["huggingface_hub"]
+test = ["pytest", "httpx"]
+
+[tool.setuptools]
+packages = ["horopter"]
