@@ -65,7 +65,12 @@ E39's result gates the recipe. If the new data costs grounding (AggreFact / E0 d
   - The value is primarily academic. The licence tracking (`permissions`, `source_license`) continues unchanged, so that a **permissive variant** can be trained and released later with the "commercial use permitted" recipe (RELEASE_POLICY §3.5, §5).
   - The cards still carry the Jev notice and list the restricted sources.
 - **Consequence for the recipe:** beta 2 need not avoid research-only sources. Candidates are ConditionalQA train (research-only) and the other downloaded rule sets, still subject to each source's own training terms. Sources that bar training (LLM-AggreFact) stay eval-only, and eval sets stay out of training.
-- **Code licence:** CC BY-NC-SA 4.0 too, unless the user prefers a software licence for `horopter/` and `training/`. Option: GPL-3.0 for the code; it is copyleft but permits commercial use.
+- **Code licence: MIT** (the user, 2026-10-18) for `horopter/`, `training/` and `eval/`.
+  - **Checked:** the code is scratch-built. There are no copied or adapted third-party files, and every dependency is permissive: torch, numpy, scipy, pandas and uvicorn are BSD; transformers, safetensors and requests are Apache-2.0; pydantic and fastapi are MIT.
+  - So nothing has to be passed on. Leave out `sdk_probe.py`, the only TypeSafe SDK user.
+- **Weights notices:**
+  - **Ettin (MIT):** the weights derive from it, so keep its copyright and licence notice in the cards.
+  - **Gemma:** the E38c v1 counterfactual edits (64 pairs) were written by Gemma-4-E4B. Gemma's terms treat models trained on its outputs as Model Derivatives, which carry its use restrictions. Recommended: drop the v1 pairs from the beta-2 recipe. The v2 pairs and the check-v2 data are Qwen3-30B-A3B outputs (Apache-2.0), which pass nothing on.
 
 ## Decisions still open (the user)
 
