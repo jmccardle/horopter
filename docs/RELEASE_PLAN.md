@@ -1,4 +1,4 @@
-# Horopter beta 2: release plan (drafted 2026-10-18)
+# Horopter beta 2: plan to the release (drafted 2026-10-18)
 
 **Targets** (all three exist, are empty, and are **public**, so a push publishes immediately):
 - https://github.com/jmccardle/horopter: code, training scripts, data recipe, docs. Local: `/storage/horopter`, remote `origin` set, **not pushed**.
@@ -10,17 +10,31 @@
 - The model fuses two views, a cached question-blind state and the question, into one answer, and reports where they agree (relation, evidence) and where they don't (abstention).
 - Theme art: the title page of *Opticae thesaurus* (Risner, Basel 1572; Ibn al-Haytham's optics with Witelo's), public domain. It is in `assets/`: rainbow, sun rays reflected by mirrors onto the ships at Syracuse, a man studying his reflection, and a bather in the water.
 
-## Timeline (48 h from 2026-10-18 evening)
+## Timeline
+
+**The next 48 h (from 2026-10-18 evening) get us to the *start* of the release process**:
+- wrap the scheduled experiments;
+- settle the beta-2 data recipe;
+- launch the beta-2 training runs on Ettin 400M and 1B.
+
+Release work (export, cards, review, push) follows once those runs are trained and evaluated.
+
+**Phase 1: wrap experiments, fix the recipe (now → about +36 h)**
 
 | when | GPU (4090) | other |
 |---|---|---|
-| now → about 02:00 | **E39: prod_e400m_b2** (400M, beta-2 data) training | scaffold this repo; port the model code |
-| about 02:00 → 04:00 | E37 bench + real policy items + generated policies on the 400M b2 trunk | read out: 400M b2 vs prod_e400m |
-| day 1 morning | **1B beta-2 run** (prod_j1b recipe + prod2 data, about 10–11 h). :8420 is down for it, or served from the 400M meanwhile | export scripts, model cards, data recipe |
-| day 1 evening | 400M: adapters (router, families, evidence, check2) + E35 abstention head refit + E37 | |
-| day 2 | 1B: adapters + head + E37 + E40; final tables | release candidates; the user reviews; push |
+| now → about 02:00 | E39 recipe probe: prod_e400m_b2 (400M, prod2 data) | scaffold this repo |
+| about 02:00 → 04:00 | E37 bench, real policy items, generated policies on the E39 trunk | read out: E39 vs prod_e400m (does the new data move JF100 / JevBench without costing grounding?) |
+| day 1 | remaining scheduled probes: the interpreter on ShARC / ProofWriter (E40 sets); check v3 (ShARC train + "more information needed") if it goes into the recipe | decide what goes into the beta-2 recipe; freeze `data/v3/prod2` (beta2 manifest) |
+| day 1 → day 2 | | port the model code, trainers and data builders into `horopter/` and `training/` (CPU) |
 
-The 400M result gates the 1B run. If the beta-2 data costs grounding (AggreFact / E0 drop more than 1 pt), the recipe is fixed first.
+**Phase 2: beta-2 training (starts about +36–48 h)**
+- **400M beta 2:** about 4.5 h. Then adapters (router, families, evidence, check), the E35 head refit, and E37 + E40.
+- **1B beta 2:** about 10–11 h. :8420 is down for it, or served from the 400M meanwhile. Then the same adapter / head / eval pass.
+
+**Phase 3: release** (after phase 2): export to the HF layout, final benchmark tables in the cards, the pre-push checklist, the user's review, push.
+
+E39's result gates the recipe. If the new data costs grounding (AggreFact / E0 down more than 1 pt), the recipe is fixed before the beta-2 runs.
 
 ## What ships
 
