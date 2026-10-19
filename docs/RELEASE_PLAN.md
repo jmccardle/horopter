@@ -70,7 +70,11 @@ E39's result gates the recipe. If the new data costs grounding (AggreFact / E0 d
   - So nothing has to be passed on. Leave out `sdk_probe.py`, the only TypeSafe SDK user.
 - **Weights notices:**
   - **Ettin (MIT):** the weights derive from it, so keep its copyright and licence notice in the cards.
-  - **Gemma:** the E38c v1 counterfactual edits (64 pairs) were written by Gemma-4-E4B. Gemma's terms treat models trained on its outputs as Model Derivatives, which carry its use restrictions. Recommended: drop the v1 pairs from the beta-2 recipe. The v2 pairs and the check-v2 data are Qwen3-30B-A3B outputs (Apache-2.0), which pass nothing on.
+  - **Generated data:** the data recipe lists which models wrote which synthetic data:
+    - Gemma-4-E4B: the E38c v1 counterfactual edits;
+    - Qwen3-30B-A3B: the v2 pairs, the check-v2 policies, and the blind verification.
+
+    It states this as plain provenance. Model outputs are data, and Horopter (an encoder decision model) is not an equivalent of any of these generators. The cards and recipe assert our right to use them and carry no caveats about it.
 
 ## Decisions still open (the user)
 
