@@ -57,13 +57,18 @@ E39's result gates the recipe. If the new data costs grounding (AggreFact / E0 d
    Source texts that are share-alike or not redistributable ship as pointers (§3). LLM-AggreFact is never included (eval only).
 4. **Reports:** the beta and beta-2 benchmark tables (E37), the effort/interpreter probes (E38), and the rule evals (E40).
 
-## Decisions needed (the user)
+## Decided (the user, 2026-10-18)
 
-- **R1, licence** for code and weights: MIT (matches Ettin, recommended) / Apache-2.0 / other. RELEASE_POLICY §6 leaves this to counsel.
-- **R2, one model or two** (RELEASE_POLICY §5):
-  - Beta 2 trains on the max data, which includes `restricted` (NC / research-only) sources and Jev labels.
-  - Releasing it under a permissive licence is the open counsel item.
-  - Options: (a) release max models with the Jev + restricted notice; (b) release only an open variant (libre + jev), which means extra training runs; (c) max under a non-commercial licence.
+- **R1 + R2: "best foot forward".**
+  - The debut release is the **max-data model**: every source whose terms permit training, including `restricted` (non-commercial / research-only) sources and Jev labels.
+  - It is released **research-only, copyleft, non-commercial**: **CC BY-NC-SA 4.0** for the weights, the data recipe and the docs (HF `license: cc-by-nc-sa-4.0`).
+  - The value is primarily academic. The licence tracking (`permissions`, `source_license`) continues unchanged, so that a **permissive variant** can be trained and released later with the "commercial use permitted" recipe (RELEASE_POLICY §3.5, §5).
+  - The cards still carry the Jev notice and list the restricted sources.
+- **Consequence for the recipe:** beta 2 need not avoid research-only sources. Candidates are ConditionalQA train (research-only) and the other downloaded rule sets, still subject to each source's own training terms. Sources that bar training (LLM-AggreFact) stay eval-only, and eval sets stay out of training.
+- **Code licence:** CC BY-NC-SA 4.0 too, unless the user prefers a software licence for `horopter/` and `training/`. Option: GPL-3.0 for the code; it is copyleft but permits commercial use.
+
+## Decisions still open (the user)
+
 - **R3, data release scope at launch:** recipe + scripts + our synthetic data (generated policies, check-v2, counterfactual pairs: all libre) now, and the full committee dataset (with Jev outputs, pointers for SA sources) later (recommended) / everything at once.
 - **R4, served names:** rename the API model ids `mbnli-3-beta-*` to `horopter-*`, keeping the old names as aliases (recommended).
 - **R5, adapters in the HF repos:** yes, under `adapters/` (recommended) / separate repos.
