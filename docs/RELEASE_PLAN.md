@@ -1,11 +1,13 @@
 # Horopter beta 2: plan to the release (drafted 2026-10-18)
 
 **Targets** (all three exist, are empty, and are **public**, so a push publishes immediately):
-- https://github.com/jmccardle/horopter: code, training scripts, data recipe, docs. Local: `/storage/horopter`, remote `origin` set, **not pushed**.
-- https://huggingface.co/jmccardle/horopter-0.4B: weights (Ettin-encoder-400M base). Local draft: `/storage/horopter-hf/horopter-0.4B/`.
-- https://huggingface.co/jmccardle/horopter-1B: weights (Ettin-encoder-1B base). Local draft: `/storage/horopter-hf/horopter-1B/`.
+- https://github.com/jmccardle/horopter: code, training scripts, data recipe, docs (this repo; not pushed yet).
+- https://huggingface.co/jmccardle/horopter-0.4B: weights (Ettin-encoder-400M base).
+- https://huggingface.co/jmccardle/horopter-1B: weights (Ettin-encoder-1B base).
 
-**Name.** Horopter is the internal "mbnli-3" model (research repo `/storage/ModernBERT-NLI-advanced`, ROADMAP.md).
+**Versions.** The debut checkpoints are **horopter-0.4b-20261020** and **horopter-1b-20261020**. Each later release gets its own date.
+
+**Name.** Horopter was developed as "mbnli-3"; the served beta used the model ids `mbnli-3-beta-*`.
 - In optics, the horopter is the set of points the two eyes see as one.
 - The model fuses two views, a cached question-blind state and the question, into one answer, and reports where they agree (relation, evidence) and where they don't (abstention).
 - Theme art: the title page of *Opticae thesaurus* (Risner, Basel 1572; Ibn al-Haytham's optics with Witelo's), public domain. It is in `assets/`: rainbow, sun rays reflected by mirrors onto the ships at Syracuse, a man studying his reflection, and a bather in the water.
@@ -35,6 +37,13 @@ Release work (export, cards, review, push) follows once those runs are trained a
 **Phase 3: release** (after phase 2): export to the HF layout, final benchmark tables in the cards, the pre-push checklist, the user's review, push.
 
 E39's result gates the recipe. If the new data costs grounding (AggreFact / E0 down more than 1 pt), the recipe is fixed before the beta-2 runs.
+
+## Status (2026-10-19)
+
+- **Code port: done.** `horopter/`, `training/`, `eval/`, `scripts/export_hf.py`; see `docs/PORTING.md`. The parity test against the research code gives identical outputs (max difference 0.0) on the 400M beta with the check adapter and the abstention head. The trainers give bitwise-identical weights on a deterministic CPU mini-run.
+- **horopter-0.4b-20261020:** beta-2 training (`prod_e400m_b2`) about two-thirds done; benchmark and gate follow. It is adopted as is if the gate is clean: grounding (AggreFact, E0) within 1 pt, and multi-step policy (JF100, JevBench hard) no worse than 2 pts with at least one up.
+- **horopter-1b-20261020:** starts automatically when the 400M gate is clean (about 10 h).
+- **Then:** adapters, abstention-head refit and evals for both; export; cards; review; push.
 
 ## What ships
 
@@ -67,7 +76,7 @@ E39's result gates the recipe. If the new data costs grounding (AggreFact / E0 d
 - **Consequence for the recipe:** beta 2 need not avoid research-only sources. Candidates are ConditionalQA train (research-only) and the other downloaded rule sets, still subject to each source's own training terms. Sources that bar training (LLM-AggreFact) stay eval-only, and eval sets stay out of training.
 - **Code licence: MIT** (the user, 2026-10-18) for `horopter/`, `training/` and `eval/`.
   - **Checked:** the code is scratch-built. There are no copied or adapted third-party files, and every dependency is permissive: torch, numpy, scipy, pandas and uvicorn are BSD; transformers, safetensors and requests are Apache-2.0; pydantic and fastapi are MIT.
-  - So nothing has to be passed on. Leave out `sdk_probe.py`, the only TypeSafe SDK user.
+  - So nothing has to be passed on. Private client code (an SDK probe) is left out.
 - **Weights notices:**
   - **Ettin (MIT):** the weights derive from it, so keep its copyright and licence notice in the cards.
   - **Generated data:** the data recipe lists which models wrote which synthetic data:
@@ -87,6 +96,6 @@ E39's result gates the recipe. If the new data costs grounding (AggreFact / E0 d
 - [ ] Weights load from the HF layout with `horopter/` alone (fresh venv, CPU smoke + GPU).
 - [ ] Model cards: intended use, wire format, evidence-first framing, benchmark tables, limits (multi-step policy gap, "more information" never chosen), training data summary with licences, Jev notice, restricted-source notice.
 - [ ] No eval-only data in the repo (AggreFact, JevBench/JF100 items, ConditionalQA test).
-- [ ] No secrets, keys, hostnames or internal paths in the code (`/storage/...`, Xavier IPs, TypeSafe keys).
+- [ ] No secrets, keys, hostnames, LAN addresses or internal paths anywhere in the repo.
 - [ ] Licence files: the code licence, the weights licence, the image's public-domain note.
 - [ ] The user signs off on the cards and the README.
