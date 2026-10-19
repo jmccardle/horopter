@@ -325,6 +325,7 @@ def main():
     ap.add_argument("--max_state", type=int, default=512)
     ap.add_argument("--ref_adapters", default=None, help="dir of served adapters (<name>/adapter.safetensors) scored "
                                                          "before training for reference (typed, evidence)")
+    ap.add_argument("--test_n", type=int, default=1500, help="e-SNLI test items scored before and after")
     ap.add_argument("--seed", type=int, default=13)
     a = ap.parse_args()
     torch.manual_seed(a.seed)
@@ -347,7 +348,7 @@ def main():
         seen = {json.loads(l)["prose_state"] for l in open(pol)} if pol else set()
         tr_items += policy_items(("gen", 2), a.n_policy, rng, holdout=a.policy_holdout, eval_states=seen)
     rng.shuffle(tr_items)
-    te_esnli = esnli_items(rp(a.roles_test), 1500, random.Random(1))
+    te_esnli = esnli_items(rp(a.roles_test), a.test_n, random.Random(1))
     train = build(st, tr_items, rng)
     test = build(st, te_esnli, random.Random(2))
     test_mixed = build(st, e22_te, random.Random(3))

@@ -64,7 +64,7 @@ python training/data/policy_gen.py --n 600 --seed 0 > $D/policy_v0.jsonl        
 python training/data/node_data.py --n 6000 --seed 1 --holdout robot_sop > $D/check_train.jsonl   # check adapter v1
 
 # check v2 (Qwen3-30B-A3B writes policies + hard-negative conditions; a blind second pass verifies them)
-python training/data/check_v2_data.py build --n 600     # the research run used --n 300 (its ck2_jobs has 300 rows)
+python training/data/check_v2_data.py build --n 300     # as the research run (its ck2_jobs has 300 rows; the script default is 600)
 python training/tools/llm_fanout.py run --endpoints endpoints.json --no-think --temperature 0.8 \
     --in $D/ck2_jobs.jsonl --out $D/ck2_gen.jsonl
 python training/data/check_v2_data.py verify
@@ -187,7 +187,11 @@ The abstention head (E35 `lr_T2`) is a logistic regression on 21 answer, relatio
 - **Refit per trunk.** The beta head was fitted to prod_j1b, so each new trunk needs its own fit.
 
 ```bash
-python training/fit_abstain_head.py --help          # features on the exported trunk, then the fit -> abstain_head.json
+python training/fit_abstain_head.py features --trunk $OUT/hf/horopter-0.4B --out $OUT/abstain_feats \
+    --set pool_eval=$HOROPTER_DATA/data/v3/e09/pool_eval.jsonl \
+    --set a25_dev=$HOROPTER_DATA/data/v3/prod/eval_a25_dev.jsonl \
+    --set a25_test=$HOROPTER_DATA/data/v3/prod/eval_a25_test.jsonl      # --max_state 2048 --max_blocks 192 (defaults)
+python training/fit_abstain_head.py fit --feats $OUT/abstain_feats --out $OUT/abstain_head.json   # fit pool_eval+a25_dev, check a25_test
 python scripts/export_hf.py ... --adapters_dir <adapters parent> --abstain_head <abstain_head.json> --out $OUT/hf/horopter-0.4B
 ```
 
