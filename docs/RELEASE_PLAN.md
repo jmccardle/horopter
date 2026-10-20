@@ -38,12 +38,15 @@ Release work (export, cards, review, push) follows once those runs are trained a
 
 E39's result gates the recipe. If the new data costs grounding (AggreFact / E0 down more than 1 pt), the recipe is fixed before the beta-2 runs.
 
-## Status (2026-10-19)
+## Status (2026-10-20)
 
-- **Code port: done.** `horopter/`, `training/`, `eval/`, `scripts/export_hf.py`; see `docs/PORTING.md`. The parity test against the research code gives identical outputs (max difference 0.0) on the 400M beta with the check adapter and the abstention head. The trainers give bitwise-identical weights on a deterministic CPU mini-run.
-- **horopter-0.4b-20261020:** beta-2 training (`prod_e400m_b2`) about two-thirds done; benchmark and gate follow. It is adopted as is if the gate is clean: grounding (AggreFact, E0) within 1 pt, and multi-step policy (JF100, JevBench hard) no worse than 2 pts with at least one up.
-- **horopter-1b-20261020:** starts automatically when the 400M gate is clean (about 10 h).
-- **Then:** adapters, abstention-head refit and evals for both; export; cards; review; push.
+- **Code port: done.** `horopter/`, `training/`, `eval/`, `scripts/export_hf.py`; see `docs/PORTING.md`.
+- **Both models trained, served stacks built, benchmarked and exported.**
+  - horopter-0.4b-20261020 = `prod_e400m_b2`; horopter-1b-20261020 = `prod_j1b_b2`.
+  - Each carries the router, 6 family adapters, `evidence`, `check2` and the abstention head.
+- **Parity.** `tests/test_parity.py` (`HOROPTER_PARITY_ADAPTERS=check2,relation,nli,typed,clause`) passes on both exports against the research servers. That covers 60 requests and 132 questions, with max difference 0.0 on probabilities, relation, abstention features, evidence and served JSON.
+- **Cards:** final, with the results tables and limits. This includes the main limit of beta-2: on real rule text it rarely answers "irrelevant" or "more information needed".
+- **Remaining:** the owner's review, then push (GitHub main, HF weights + cards).
 
 ## What ships
 

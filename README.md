@@ -4,7 +4,7 @@
 
 > *Horopter*: the set of points that both eyes see as one.
 
-**Draft, not released.** Code: MIT (`LICENSE`). Weights, data recipe and docs: CC BY-NC-SA 4.0 (research, non-commercial). Weights: [horopter-0.4B](https://huggingface.co/jmccardle/horopter-0.4B), [horopter-1B](https://huggingface.co/jmccardle/horopter-1B) (beta 2, coming).
+Code: MIT (`LICENSE`). Weights, data recipe and docs: CC BY-NC-SA 4.0 (research, non-commercial). Weights: [horopter-0.4B](https://huggingface.co/jmccardle/horopter-0.4B), [horopter-1B](https://huggingface.co/jmccardle/horopter-1B) (first release, 2026-10-20).
 
 Horopter is an encoder-only *decision model*. Give it a **state** (a document, a record or a JSON object) and typed **questions** about it (yes/no, choose one, score on a scale). It answers them in one pass, and for every answer it also returns:
 
@@ -20,13 +20,16 @@ Built on [Ettin](https://huggingface.co/jhu-clsp/ettin-encoder-1b) encoders (400
 
 ## Status
 
-| | beta (internal) | beta 2 |
-|---|---|---|
-| grounding (LLM-AggreFact balanced accuracy) | 75.7 (1B) | pending |
-| 4-way relation (E0 macro-F1) | 78.6 | pending |
-| multi-step policy decisions (JevBench hard) | 44.1 | pending |
+First release, **2026-10-20**: [horopter-0.4B](https://huggingface.co/jmccardle/horopter-0.4B) (`horopter-0.4b-20261020`) and [horopter-1B](https://huggingface.co/jmccardle/horopter-1B) (`horopter-1b-20261020`). Router + adapters, one pass:
 
-Beta 2 adds generated rule-application data, counterfactual minimal pairs and deciding-rule evidence (see `docs/RELEASE_PLAN.md`).
+| | Horopter 1B | Horopter 0.4B | mbnli-3 beta 1B (internal) | best 4–9B decoder we tested |
+|---|---|---|---|---|
+| grounding (LLM-AggreFact balanced accuracy) | 75.7 | 74.8 | 75.7 | 77.2 |
+| 4-way relation (macro-F1) | 78.6 | 76.6 | 78.6 | 75.3 |
+| multi-step policy decisions (JevBench hard) | 40.5 | 36.0 | 44.1 | 64.0 |
+| generated policies, one pass (prose) | 97.7 | 95.0 | 53.6 | |
+
+The full tables and limits are in the model cards. Grounding and relation are level with 4–9B decoders. Multi-step policy decisions on real text trail them by about 20 points. This release has rule-application data with always-determined answers, so it rarely says "more information needed" on real rule text.
 
 ## Layout
 

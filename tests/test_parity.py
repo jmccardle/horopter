@@ -9,8 +9,8 @@ Needs two things, else every test is skipped:
             --base jhu-clsp/ettin-encoder-400m --max_state 2048 \
             --adapter $HOROPTER_RESEARCH_ROOT/outputs/v3/e24/prod400m/check \
             --abstain_head $HOROPTER_RESEARCH_ROOT/outputs/v3/e35/abstain_lr_T2.json --out $HOROPTER_PARITY_EXPORT
-Optional: HOROPTER_PARITY_TRUNK (research trunk name, default prod400m), HOROPTER_PARITY_REPORT (write the max
-differences as JSON there).
+Optional: HOROPTER_PARITY_TRUNK (research trunk name, default prod400m), HOROPTER_PARITY_ADAPTERS (comma list of
+adapters to compare besides the trunk, default check), HOROPTER_PARITY_REPORT (write the max differences as JSON there).
 
     CUDA_VISIBLE_DEVICES="" python -m pytest -s tests/test_parity.py
 Checks per request (about 20: noul / choice / score, text and JSON states, several questions per state, evidence on):
@@ -32,6 +32,7 @@ os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
 RESEARCH = os.environ.get("HOROPTER_RESEARCH_ROOT")
 EXPORT = os.environ.get("HOROPTER_PARITY_EXPORT")
 TRUNK = os.environ.get("HOROPTER_PARITY_TRUNK", "prod400m")
+ADAPTERS = [a for a in os.environ.get("HOROPTER_PARITY_ADAPTERS", "check").split(",") if a]
 TOL = 1e-4
 
 pytestmark = pytest.mark.skipif(
@@ -73,7 +74,7 @@ PRIO = {"type": "choice", "instructions": "Which team should handle this ticket?
 
 def requests():
     R = []
-    for model in ("base", "check"):
+    for model in ["base"] + ADAPTERS:
         R += [
             (model, REFUND, {"q1": YESNO, "q2": {"type": "noul", "instructions": "Was the item bought on clearance?"}},
              "all"),
@@ -185,7 +186,7 @@ def test_parity(pair):
                                                            ha["answers"][q]["mbnli"]["abstain"]["p"]))
         worst["json"] = max(worst["json"], _num_diff(ra["answers"], ha["answers"]))
         assert ra["usage"] == ha["usage"]
-    # the adapter swap is real: the check adapter changes some answers relative to the trunk alone
+    # the adapter swap is real: the adapters change some answers relative to the trunk alone
     eff = max(float(np.abs(by_model[k][q]["p"] - by_model[("base",) + k[1:]][q]["p"]).max())
               for k in by_model if k[0] != "base" and ("base",) + k[1:] in by_model for q in by_model[k])
     report = {"requests": len(requests()), "questions": n_q, "served_spans": n_spans,
