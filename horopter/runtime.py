@@ -16,6 +16,7 @@ HF layout (a directory):
     tokenizer files             the base model's tokenizer (optional; else downloaded by base model id)
     adapters/<name>/adapter.safetensors + adapter.json
     abstain_head.json           the logistic abstention head (optional)
+    quantized/model-<scheme>.safetensors   optional Q8 / Q4 trunks (horopter.quant), loaded with load(..., quant=scheme)
 """
 import json
 from pathlib import Path
@@ -231,18 +232,29 @@ def base_config_of(cfg):
     return AutoConfig.for_model(bc.pop("model_type"), **bc)
 
 
-def load(path_or_hub_dir, device=None, adapters=True, abstain_head=True, max_state=None, pretrained_init=False):
+def load(path_or_hub_dir, device=None, adapters=True, abstain_head=True, max_state=None, pretrained_init=False,
+         quant=None):
     """Load the HF layout (a local directory, or a hub repo id if huggingface_hub is installed) -> Student, with every
     adapter under adapters/ in .bank and the abstention head (if any) in .abstain_head.
     pretrained_init: construct the encoder from the base model's pretrained weights before loading (see build_trunk;
-    training only, needs the base weights)."""
+    training only, needs the base weights).
+    quant: "w8" | "w4g32" | "w4g128" loads quantized/model-<quant>.safetensors instead of model.safetensors (a hub
+    download then fetches only that weights file)."""
+    from safetensors import safe_open
     from safetensors.torch import load_file
+
+    from . import quant as Q
+    wfile = Q.file_of(quant) if quant else "model.safetensors"
     path = Path(path_or_hub_dir)
     if not path.exists():
         from huggingface_hub import snapshot_download   # optional dependency
-        path = Path(snapshot_download(str(path_or_hub_dir)))
+        other = [Q.file_of(s) for s in Q.SCHEMES if s != quant] + (["model.safetensors"] if quant else [])
+        path = Path(snapshot_download(str(path_or_hub_dir), ignore_patterns=other))
     cfg = read_config(path)
-    sd = load_file(str(path / "model.safetensors"))
+    sd = load_file(str(path / wfile))
+    if quant:
+        with safe_open(str(path / wfile), "pt") as f:
+            sd = Q.unpack(sd, f.metadata() or {})
     model_sd = {k: v for k, v in sd.items() if not k.startswith("answer.")}
     ans_sd = {k[len("answer."):]: v for k, v in sd.items() if k.startswith("answer.")}
     model, ans = build_trunk(base_config_of(cfg), model_sd, ans_sd, cfg["base_model"] if pretrained_init else None)
@@ -251,6 +263,7 @@ def load(path_or_hub_dir, device=None, adapters=True, abstain_head=True, max_sta
     st = Student(model, ans, AutoTokenizer.from_pretrained(str(tok_src)), max_state=max_state or cfg["max_state"],
                  max_q=cfg.get("max_q", 128), r=cfg["lora"]["r"], device=device, name=cfg.get("name", path.name),
                  run=cfg.get("run", ""), config=cfg)
+    st.quant = quant or ""
     if adapters and (path / "adapters").is_dir():
         for d in sorted((path / "adapters").glob("*/adapter.safetensors")):
             if d.parent.name != "smoke":

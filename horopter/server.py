@@ -257,6 +257,8 @@ def main() -> int:
                                                      "model's own adapters/")
     ap.add_argument("--abstain_head", default=None, help="abstention head JSON (default: the model's abstain_head.json)")
     ap.add_argument("--no_adapters", action="store_true", help="serve the trunk alone")
+    ap.add_argument("--quant", default=None, choices=["w8", "w4g32", "w4g128"],
+                    help="load quantized/model-<quant>.safetensors (Q8 / Q4 trunk) instead of model.safetensors")
     a = ap.parse_args()
     import torch
     import uvicorn
@@ -266,7 +268,7 @@ def main() -> int:
     if a.device == "cpu":
         torch.set_num_threads(a.threads)
     t0 = time.perf_counter()
-    st = runtime.load(a.model, device=a.device, adapters=not a.no_adapters, max_state=a.max_state)
+    st = runtime.load(a.model, device=a.device, adapters=not a.no_adapters, max_state=a.max_state, quant=a.quant)
     if a.adapters:
         from pathlib import Path
         for d in sorted(Path(a.adapters).glob("*/adapter.safetensors")):
