@@ -104,11 +104,12 @@ Two CPU options were tried and are not recommended:
 | | 0.4B | 1B |
 |---|---|---|
 | GPU memory, 3 slots | 3.0–3.2 GB reserved (4090, the benchmark's shapes captured) | 8.5 GB (4090, process total, all default shapes captured) |
-| `--precapture default`, start-up (81 shapes × 3 slots = 243 graphs) | 11–16 s (4090, measured with 2–3 slots) | about 5 min (4090, while other jobs shared the GPU) |
+| `--precapture default`, start-up (81 shapes × 3 slots = 243 graphs) | 11–16 s (4090, measured with 2–3 slots) | 286 s on a first start (empty torch compile cache, other jobs on the GPU), 66 s after (4090) |
 
 **Precapture.** Graphs are captured the first time a shape is seen. A shape is (padded state length, question tokens, adapters per request, options, evidence mode).
 - Without `--precapture`, the first request of each new shape pays its capture: tens to hundreds of ms.
 - With `--precapture default`, all 81 default shapes are captured for every slot at start-up.
+- The router pass is compiled with dynamic shapes, so the first routed requests also pay a compile (about 2 s once).
 - Captured graphs and the state slots stay resident. On a shared-memory device (Jetson), capture only the shapes the deployment uses: list them with `FastPath.discover(requests)` and pass the list as `precapture`.
 
 **CPU memory:** each cached 2,000-token state holds about 0.46 GB of fp32 keys and values. Set `cache_size` to what the host can spare.
