@@ -35,11 +35,12 @@ The full tables and limits are in the model cards. Grounding and relation are le
 
 ```
 horopter/     model, packing, losses, runtime (adapters), evidence, abstention, server (typed wire format)
+horopter/fast/  fast path: state cache, CUDA graphs, block-sparse state attention, all adapters in one pass
 training/     joint trainer, adapter / evidence trainers, abstention head fit, data builders, recipes/beta2.md
 eval/         benchmark scorers (E37 bench, E40 rule evals) and the HTTP client
 scripts/      export_hf.py: training checkpoint -> HF layout
-tests/        parity against the research code
-docs/         release plan, porting notes (docs/PORTING.md)
+tests/        parity against the research code; fast path against the release path
+docs/         release plan, porting notes (docs/PORTING.md), fast path (docs/FAST_PATH.md)
 assets/       theme art (public domain)
 ```
 
@@ -50,7 +51,10 @@ out = m.answer("Refunds within 30 days. The lamp was bought 12 days ago.",
                {"q": {"type": "noul", "instructions": "Is a refund allowed?"}}, evidence=True)
 ```
 
-Server: `python -m horopter.server --model path/to/horopter-0.4B --port 8420`.
+Server: `python -m horopter.server --model path/to/horopter-0.4B --port 8420 --fast`.
+
+`--fast` serves the same answers (up to bf16 rounding) 3–19× faster on a GPU, and caches states on a CPU: a state asked
+about again costs only its question tokens. Measurements, settings and memory are in [docs/FAST_PATH.md](docs/FAST_PATH.md).
 
 ## Credits
 

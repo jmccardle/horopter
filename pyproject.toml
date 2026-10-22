@@ -26,4 +26,4 @@ hub = ["huggingface_hub"]
 test = ["pytest", "httpx"]
 
 [tool.setuptools]
-packages = ["horopter"]
+packages = ["horopter", "horopter.fast"]

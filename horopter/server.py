@@ -28,7 +28,7 @@ Answer fields (per question): noul -> noul (P(true)); choice -> choice, confiden
                       adapter when one is loaded; string states only
     score.median      score questions: the median level
 
-    python -m horopter.server --model path/to/horopter-0.4B [--host 127.0.0.1] [--port 8420] [--device cpu]
+    python -m horopter.server --model path/to/horopter-0.4B [--host 127.0.0.1] [--port 8420] [--device cpu] [--fast]
 """
 from __future__ import annotations
 
@@ -102,8 +102,9 @@ def typed_answer(q, p):
             "probabilities": {str(i): round(x, 4) for i, x in enumerate(p)}, "_median": med}
 
 
-def build_app(st, prefix: str = "horopter", aliases=("mbnli-3-beta",), release_date: str = ""):
-    """st: a horopter.runtime.Student with its adapter bank (horopter.runtime.load). -> FastAPI app."""
+def build_app(st, prefix: str = "horopter", aliases=("mbnli-3-beta",), release_date: str = "", fast=None):
+    """st: a horopter.runtime.Student with its adapter bank (horopter.runtime.load). -> FastAPI app.
+    fast: a horopter.fast.FastPath on st (same answers up to bf16 kernel rounding; docs/FAST_PATH.md)."""
     from fastapi import FastAPI, HTTPException
 
     from . import families as F
@@ -114,7 +115,7 @@ def build_app(st, prefix: str = "horopter", aliases=("mbnli-3-beta",), release_d
     has_router = "router" in bank
     families = [f for f in F.FAMILIES if f in bank]
     release_date = release_date or st.config.get("release_date", "")
-    version = f"{CONTRACT} trunk={st.name}" + (f":{st.run}" if st.run else "")
+    version = f"{CONTRACT} trunk={st.name}" + (f":{st.run}" if st.run else "") + (" fast" if fast else "")
 
     served = {prefix: "route"} if has_router else {}
     for a in bank:
@@ -130,7 +131,7 @@ def build_app(st, prefix: str = "horopter", aliases=("mbnli-3-beta",), release_d
     @app.get("/healthz")
     def healthz():
         return {"ok": True, "trunk": st.name, "p": st.run, "adapters": sorted(bank), "router": has_router,
-                "device": str(st.device)}
+                "device": str(st.device), "fast": dict(fast.cfg) if fast else None}
 
     @app.get("/v1/models")
     def models():
@@ -171,9 +172,7 @@ def build_app(st, prefix: str = "horopter", aliases=("mbnli-3-beta",), release_d
         qs = {qid: normalise(q, qid) for qid, q in req.questions.items()}
         evidence = ev_mode != "off" and isinstance(req.state, str) and not strict
 
-        t_req = time.perf_counter()
-        with _LOCK:
-            wait_ms = (time.perf_counter() - t_req) * 1000
+        def step():                                # routing + answering: the model's part of the request
             route = {}
             if served[model] == "route":
                 st.use("router")
@@ -187,6 +186,8 @@ def build_app(st, prefix: str = "horopter", aliases=("mbnli-3-beta",), release_d
             else:
                 for qid in qs:
                     route[qid] = {"adapter": served[model], "p": 1.0, "router": None}
+            if fast is not None:
+                return route, fast.answer(state, qs, route, ev_mode if evidence else False)
             res = {}
             ev_ad = "evidence" in bank and evidence
             for ad in sorted({r["adapter"] for r in route.values()}):
@@ -197,6 +198,12 @@ def build_app(st, prefix: str = "horopter", aliases=("mbnli-3-beta",), release_d
                 st.use("evidence")
                 for qid, d in st.answer(state, qs, evidence=True).items():
                     res[qid]["ev"] = d["ev"]
+            return route, res
+
+        t_req = time.perf_counter()
+        with _LOCK:
+            wait_ms = (time.perf_counter() - t_req) * 1000
+            route, res = fast.call(step) if fast is not None else step()
         server_ms = (time.perf_counter() - t_req) * 1000
 
         answers = {}
@@ -259,6 +266,12 @@ def main() -> int:
     ap.add_argument("--no_adapters", action="store_true", help="serve the trunk alone")
     ap.add_argument("--quant", default=None, choices=["w8", "w4g32", "w4g128"],
                     help="load quantized/model-<quant>.safetensors (Q8 / Q4 trunk) instead of model.safetensors")
+    ap.add_argument("--fast", action="store_true", help="horopter.fast: state cache + CUDA graphs + Flex + one pass for "
+                                                         "all adapters (cuda; bf16 weights); state cache only on cpu")
+    ap.add_argument("--slots", type=int, default=3, help="--fast: states kept in the cache")
+    ap.add_argument("--precapture", default="none", choices=["none", "default"],
+                    help="--fast on cuda: capture the default graph shapes at start-up (first requests then pay no "
+                         "capture; costs start-up time and GPU memory)")
     a = ap.parse_args()
     import torch
     import uvicorn
@@ -278,7 +291,18 @@ def main() -> int:
         st.abstain_head = A.AbstainHead.from_json(a.abstain_head)
     print(f"loaded {st.name} + adapters {sorted(st.bank)} in {time.perf_counter() - t0:.1f}s; abstain head "
           f"{st.abstain_head.name if st.abstain_head else 'placeholder'}", flush=True)
-    uvicorn.run(build_app(st, a.prefix, [x for x in a.alias.split(",") if x]), host=a.host, port=a.port,
+    fp = None
+    if a.fast:
+        from . import fast
+        t0 = time.perf_counter()
+        pre = None
+        if a.precapture == "default" and torch.device(st.device).type == "cuda":
+            from .fast.multilora import default_shapes
+            pre = default_shapes()
+        fp = fast.FastPath(st, slots=a.slots, precapture=pre)
+        print(f"fast path {fp.cfg} ready in {time.perf_counter() - t0:.1f}s ({fp.captured} graphs precaptured)",
+              flush=True)
+    uvicorn.run(build_app(st, a.prefix, [x for x in a.alias.split(",") if x], fast=fp), host=a.host, port=a.port,
                 log_level="warning")
     return 0
 

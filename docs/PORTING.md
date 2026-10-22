@@ -24,7 +24,10 @@ The research paths are relative to the research repository root.
 | `horopter/evidence.py` | `student.py` (`Student.spans`, `Student.state_offsets`) | unchanged |
 | `horopter/abstain.py` | `student.py` (`Student.abstain_features`), `serve.py` (`abstain_of` and the placeholder) | `AbstainHead` reads `abstain_head.json`. |
 | `horopter/families.py` | `experiments/v3/e24_dryrun_router/families.py` | Keeps `FAMILIES`, `ROUTER_Q` (option order unchanged) and `router_state`. |
-| `horopter/server.py` | `experiments/v3/e24_dryrun_router/serve.py` | Same wire format; see "Served names" below. |
+| `horopter/server.py` | `experiments/v3/e24_dryrun_router/serve.py` | Same wire format; see "Served names" below. `--fast` added after the first release. |
+| `horopter/fast/{stateq,graphq,flexattn,vheads,multilora}.py` | `experiments/v3/e42_jetson/` (same file names) | Imports made package-relative; docstrings cleaned. The fused cold-path module (`fusedq.py`) was dropped because it measured neutral. |
+| `horopter/fast/bank.py` | `experiments/v3/e42_jetson/fast.py` | `install(..., fused=)` removed. |
+| `horopter/fast/__init__.py` (`FastPath`) | `experiments/v3/e42_jetson/preencode.py` (`Server`: worker thread, `put_state`) | Only the worker thread and the answer step. Routing and the wire format stay in `horopter/server.py`. |
 
 ### `training/`
 
