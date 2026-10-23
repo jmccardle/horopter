@@ -4,20 +4,34 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "horopter"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Horopter: an encoder-only typed-decision model with relation, evidence spans and abstention"
 readme = "README.md"
 license = { text = "MIT" }
+authors = [{ name = "John McCardle" }]
 requires-python = ">=3.10"
+keywords = ["nlp", "encoder", "classification", "decision", "evidence", "abstention", "nli"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "torch>=2.1",
-    "transformers>=4.48",
+    "transformers>=4.48,<5",  # 5.x changed the ModernBERT layer call (position_embeddings)
     "safetensors",
     "numpy",
+    "huggingface_hub",
     "fastapi",
     "uvicorn",
     "pydantic>=2",
 ]
+
+[project.urls]
+Homepage = "https://github.com/jmccardle/horopter"
+"Model (0.4B)" = "https://huggingface.co/jmccardle/horopter-0.4B"
+"Model (1B)" = "https://huggingface.co/jmccardle/horopter-1B"
 
 [project.optional-dependencies]
 server = ["fastapi", "uvicorn", "pydantic>=2"]
@@ -27,3 +41,6 @@ test = ["pytest", "httpx"]
 
 [tool.setuptools]
 packages = ["horopter", "horopter.fast"]
+
+[tool.setuptools.dynamic]
+version = { attr = "horopter.__version__" }

@@ -1,6 +1,6 @@
 # Horopter
 
-<p align="center"><img src="assets/thesaurus_opticus_1572_titlepage.jpg" width="420" alt="Title page of Opticae thesaurus (Basel, 1572)"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/jmccardle/horopter/main/assets/thesaurus_opticus_1572_titlepage.jpg" width="420" alt="Title page of Opticae thesaurus (Basel, 1572)"></p>
 
 > *Horopter*: the set of points that both eyes see as one.
 
@@ -51,7 +51,7 @@ out = m.answer("Refunds within 30 days. The lamp was bought 12 days ago.",
                {"q": {"type": "noul", "instructions": "Is a refund allowed?"}}, evidence=True)
 ```
 
-Server: `python -m horopter.server --model path/to/horopter-0.4B --port 8420 --fast`.
+Server: `python -m horopter.server --model jmccardle/horopter-0.4B --port 8420 --fast` (add `--device cpu` on a machine without a GPU).
 
 `--fast` serves the same answers (up to bf16 rounding) 3–19× faster on a GPU, and caches states on a CPU: a state asked
 about again costs only its question tokens. Measurements, settings and memory are in [docs/FAST_PATH.md](docs/FAST_PATH.md).

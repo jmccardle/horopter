@@ -1,0 +1,156 @@
+# Release pipeline for the horopter package.
+#
+# Shape: test -> build -> publish. The publish jobs use only the artifact made by `build`.
+# Authentication is PyPI Trusted Publishing (OIDC): no API token in repository secrets. The publisher identity is
+# jmccardle/horopter, workflow publish.yml, environment `pypi` or `testpypi`.
+#
+# Triggers:
+#   - a tag push `v*` publishes to PyPI (the tag must equal horopter.__version__);
+#   - a manual run (workflow_dispatch) publishes to the index it names (testpypi or pypi).
+#
+# No continue-on-error and no `|| true`: a half-finished release must fail loudly. PyPI versions cannot be reused.
+
+name: Publish horopter to PyPI
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which index to publish to"
+        required: true
+        default: testpypi
+        type: choice
+        options:
+          - testpypi
+          - pypi
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install (CPU torch, then the package with test extras)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          # CPU wheels: the CUDA build is about 2 GB and the runner has no GPU.
+          pip install torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+          pip install '.[test]'
+
+      - name: pytest
+        shell: bash
+        # test_parity / test_fast skip themselves without exported weights; test_package always runs.
+        run: |
+          set -euo pipefail
+          pytest -q tests
+
+  build:
+    name: Build wheel and sdist
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Check the version matches the tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          V="$(sed -n 's/^__version__ = "\([^"]*\)"/\1/p' horopter/__init__.py)"
+          if [ -z "$V" ]; then echo "could not read __version__ from horopter/__init__.py" >&2; exit 1; fi
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ] && [ "${GITHUB_REF_NAME#v}" != "$V" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match package version ${V}" >&2; exit 1
+          fi
+          echo "version $V"
+
+      - name: Build
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m build --sdist --wheel --outdir dist .
+          ls -la dist
+          count="$(find dist -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' \) | wc -l)"
+          if [ "$count" -ne 2 ]; then echo "expected 2 artifacts (wheel + sdist), found $count" >&2; exit 1; fi
+
+      - name: twine check (strict)
+        shell: bash
+        run: |
+          set -euo pipefail
+          twine check --strict dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: horopter-dists
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    needs: [build]
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/horopter/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: horopter-dists
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/
+
+  publish-pypi:
+    name: Publish to PyPI
+    if: github.event_name == 'push' || inputs.target == 'pypi'
+    needs: [build]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/horopter/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: horopter-dists
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/

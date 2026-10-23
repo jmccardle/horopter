@@ -10,3 +10,6 @@ training/data/*.jsonl
 training/data/*.jsonl.gz
 logs/
 .venv/
+build/
+dist/
+*.egg-info/
