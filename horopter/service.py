@@ -79,26 +79,30 @@ class ServiceError(Exception):
 
 
 class Service:
-    """st: a horopter.runtime.Student with its adapter bank; fast: an optional horopter.fast.FastPath on st."""
+    """st: a horopter.runtime.Student with its adapter bank; fast: an optional horopter.fast.FastPath on st;
+    routing: a horopter.routing.Routing (default: routing.configure(st), the bundled router if one is loaded).
+    The prefix name (e.g. "horopter") is the routed model, or the served adapter when routing serves one directly;
+    prefix-<adapter> answers with that adapter."""
 
-    def __init__(self, st, prefix="horopter", aliases=("mbnli-3-beta",), release_date="", fast=None):
+    def __init__(self, st, prefix="horopter", aliases=("mbnli-3-beta",), release_date="", fast=None, routing=None):
         from . import families as F
         from . import fields as FL
+        from . import routing as RT
         from .model import REF, SUP
         from .packing import options
         from .runtime import answer_routed
         self._mods = (F, FL, SUP, REF, options, answer_routed)
         self.st, self.fast, self.lock = st, fast, threading.Lock()
         bank = st.bank
-        self.has_router = "router" in bank
-        self.families = [f for f in F.FAMILIES if f in bank]
+        self.routing = routing or RT.configure(st)
+        self.has_router = self.routing.routed
         self.release_date = release_date or st.config.get("release_date", "")
         self.version = f"{CONTRACT} trunk={st.name}" + (f":{st.run}" if st.run else "") + (" fast" if fast else "")
-        self.default_model = prefix if self.has_router else f"{prefix}-base"
+        self.default_model = prefix
         self.field_adapter = "extract" if "extract" in bank else None
-        served = {prefix: "route"} if self.has_router else {}
+        served = {prefix: "route" if self.has_router else self.routing.serve}
         for a in bank:
-            if a not in ("router", "evidence", "extract") and not a.startswith("ev_"):   # helpers: never answered from
+            if a not in RT.HELPERS and not a.startswith("ev_"):   # helpers: never answered from
                 served[f"{prefix}-{a}"] = a
         served.update({k + "-strict": v for k, v in list(served.items())})
         for alias in aliases or ():   # the same models under other names (e.g. the beta's mbnli-3-beta)
@@ -110,12 +114,13 @@ class Service:
         from . import __version__
         st, fast = self.st, self.fast
         return {"ok": True, "trunk": st.name, "p": st.run, "adapters": sorted(st.bank), "router": self.has_router,
-                "device": str(st.device), "fast": dict(fast.cfg) if fast else None, "version": __version__}
+                "routing": self.routing.info(), "device": str(st.device), "fast": dict(fast.cfg) if fast else None,
+                "version": __version__}
 
     def models(self):
-        out, meta = [], self.st.meta
+        out, meta, rt = [], self.st.meta, self.routing
         for name, a in sorted(self.served.items()):
-            desc = ("router over " + ", ".join(self.families)) if a == "route" else (
+            desc = (f"router {rt.router} ({rt.layout} layout) over " + ", ".join(rt.targets)) if a == "route" else (
                 f"adapter {a}: " + (meta[a].get("kind", "") + (f", dev acc {meta[a].get('dev_acc')}" if a != "base" else "")))
             out.append({"name": name, "description": desc + (" (strict typed body)" if name.endswith("-strict") else ""),
                         "release_date": self.release_date})
@@ -194,13 +199,23 @@ class Service:
             routed = list(qs)                      # fields skip the router: it re-reads the state per question, and
             # the adapter hardly changes field answers (all six family adapters tie on the E43-style probes)
             if served[model] == "route" and routed:
-                st.use("router")
-                rp = st.answer_one_each([(F.router_state(state, allq[q]), F.ROUTER_Q) for q in routed])
+                rt = self.routing
+                rq = {q: rt.question(allq[q], st.tok, st.col.mq) for q in routed}
+                if rt.layout == "state":           # a fresh state per routed question
+                    st.use(rt.router)
+                    rp = st.answer_one_each([(F.router_state(state, allq[q]), rq[q][0]) for q in routed])
+                else:                              # the request's state, shared with the answer pass
+                    rr = {q: {"adapter": rt.router} for q in routed}
+                    rs = fast.answer(state, {q: rq[q][0] for q in routed}, rr, False) if fast is not None else \
+                        answer_routed(st, state, {q: rq[q][0] for q in routed}, rr, False)
+                    rp = [rs[q]["p"] for q in routed]
                 for qid, r in zip(routed, rp):
-                    probs = {f: float(x) for f, x in zip(F.FAMILIES, r)}
-                    best = max((f for f in probs if f in bank), key=probs.get)
+                    probs = {f: float(x) for f, x in zip(rt.targets, r)}
+                    best = max(probs, key=probs.get)
                     route[qid] = {"adapter": best, "p": round(probs[best], 4),
                                   "router": {f: round(x, 4) for f, x in probs.items()}}
+                    if rq[qid][1]:
+                        route[qid]["question_cut"] = True
             for qid in allq:
                 if qid not in route:
                     ad = served[model]

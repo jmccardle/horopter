@@ -76,7 +76,7 @@ def probs(body):
 
 
 def spans(body):
-    return {q: sorted((e["start"], e["end"], e["role"], e["option"]) for e in a["mbnli"].get("evidence", []))
+    return {q: sorted((e["start"], e["end"], e["role"], e["option"]) for e in a["horopter"].get("evidence", []))
             for q, a in body["answers"].items()}
 
 

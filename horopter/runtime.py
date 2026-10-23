@@ -126,6 +126,20 @@ class Student:
         meta = path / "adapter.json"
         self.meta[name] = json.load(open(meta)) if meta.exists() else {"name": name}
 
+    def add_adapter_from(self, source, name=None, check_trunk=True):
+        """Load an adapter from a directory or a hub reference ("user/repo" or "user/repo:path/in/repo") into the bank
+        under name (default: adapter.json "name", else the directory name). check_trunk: refuse an adapter trained on
+        another trunk (adapter.json "p" != this model's run); an adapter only fits the exact trunk it was trained on.
+        -> the name."""
+        path = adapter_path(source)
+        meta = json.load(open(path / "adapter.json")) if (path / "adapter.json").exists() else {}
+        name = name or meta.get("name") or path.name
+        if check_trunk and self.run and meta.get("p") and meta["p"] != self.run:
+            raise ValueError(f"adapter {name!r} ({source}) was trained on trunk {meta['p']!r}; this model is "
+                             f"{self.run!r}. An adapter only fits the trunk it was trained on")
+        self.add_adapter(name, path)
+        return name
+
     def use(self, name):
         if self.loaded != name:
             self.load_adapter(self.bank[name], name)
@@ -251,7 +265,25 @@ def base_config_of(cfg):
     return AutoConfig.for_model(bc.pop("model_type"), **bc)
 
 
-def load(path_or_hub_dir, device=None, adapters=True, abstain_head=True, max_state=None, pretrained_init=False,
+def adapter_path(source):
+    """A local adapter directory (adapter.safetensors + adapter.json) for a directory or a hub reference
+    "user/repo" (adapter at the repo root) or "user/repo:sub/dir" (huggingface_hub needed for the hub)."""
+    path = Path(source)
+    if (path / "adapter.safetensors").exists():
+        return path
+    if path.exists():
+        raise FileNotFoundError(f"{source}: no adapter.safetensors in this directory")
+    from huggingface_hub import snapshot_download   # optional dependency
+    repo, _, sub = str(source).partition(":")
+    sub = sub.strip("/")
+    root = Path(snapshot_download(repo, allow_patterns=[f"{sub}/*" if sub else "adapter.*"]))
+    path = root / sub if sub else root
+    if not (path / "adapter.safetensors").exists():
+        raise FileNotFoundError(f"{source}: no adapter.safetensors at {sub or 'the repo root'}")
+    return path
+
+
+def load(path_or_hub_dir,device=None, adapters=True, abstain_head=True, max_state=None, pretrained_init=False,
          quant=None):
     """Load the HF layout (a local directory, or a hub repo id if huggingface_hub is installed) -> Student, with every
     adapter under adapters/ in .bank and the abstention head (if any) in .abstain_head.
