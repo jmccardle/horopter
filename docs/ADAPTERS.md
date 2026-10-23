@@ -63,6 +63,19 @@ The bundled `router` adapter was trained on this question over the six bundled f
 The bundled router was trained on the `state` layout and uses it by default. Any other router uses `question` unless
 its `adapter.json` says otherwise, or `--route_layout` is given.
 
+### Choosing a router
+
+These numbers are from E51: picking a question's task among K one-line descriptions the router never trained on, with 504 questions over 42 tasks.
+
+| router | K = 4 | K = 8 |
+|---|---|---|
+| bundled `router` (state layout) | 95–96% | 90–93% |
+| `base`, no router adapter | 75–82% | 62–73% |
+
+- **Use the bundled router for your own targets too:** `--router router --route ...`. It learned the routing question, not just the six bundled answers.
+- **`--router base` needs no router adapter**, but it is much weaker.
+- **Write concrete descriptions** that say what the questions are about, such as "the sentiment of a financial news headline", not the kind of task ("labelling a text"). Over the six abstract bundled descriptions, `base` routes correctly only 17–53% of the time.
+
 ### Fields and evidence
 
 - Fields (Clairic extraction) are not routed. They use the `extract` adapter when one is loaded, else the served
@@ -86,9 +99,9 @@ The default model name (`horopter`, or `--prefix`) is the routed model, or the s
 # one adapter, no routing
 python -m horopter.server --model jmccardle/horopter-0.4B --no_adapters --adapter refunds=./refunds --serve refunds
 
-# two new adapters, routed zero-shot by the trunk
-python -m horopter.server --model jmccardle/horopter-0.4B --no_adapters \
-    --adapter ./refunds --adapter ./triage --router base \
+# two new adapters, routed by their descriptions with the bundled router (--router base: no router adapter at all)
+python -m horopter.server --model jmccardle/horopter-0.4B \
+    --adapter ./refunds --adapter ./triage --router router \
     --route refunds "a retail refund or return decision" --route triage "which support team gets a ticket"
 
 # one new adapter added to the bundled router's options, with the competing bundled one removed
