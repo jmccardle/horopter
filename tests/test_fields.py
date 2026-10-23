@@ -71,3 +71,15 @@ def test_parsers():
                    "4th of July": "2026-07-04", "March 9": "2026-03-09"}
     assert [F.parse_time(m).isoformat() for m in F.TIME.finditer("at 2:30 pm, 14:05:09 or 12 am")] == \
         ["14:30:00", "14:05:09", "00:00:00"]
+
+
+def test_names_across_line_breaks():
+    state = "Questions? Contact:\nDana  Ruiz\nPriya Shah\ntoday."
+    offs = words(state)
+    sup = support(state, offs, "Dana  Ruiz\nPriya Shah")
+    a = F.answer("contacts", {"type": "list", "items": "text", "instructions": "People to contact"}, state, offs, sup, 0.95)
+    assert a["value"] == ["Dana Ruiz", "Priya Shah"]                      # one name per line, never merged
+    assert [state[x:y] for x, y in a["spans"]] == ["Dana  Ruiz", "Priya Shah"]
+    a = F.answer("who", {"type": "text", "instructions": "The contact name"}, "Contact\nDana Ruiz", [(0, 7), (8, 12), (13, 17)],
+                 [0.1, 0.9, 0.9], 0.95)
+    assert a["value"] == "Dana Ruiz" and a["span"] == [8, 17]

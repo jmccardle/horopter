@@ -46,7 +46,7 @@ _UNIT_ALIAS = {"sec": "second", "min": "minute", "hr": "hour", "wk": "week", "mo
 # (E43's categories); others use the support spans themselves. The keyword found earliest in the instructions wins
 # (the head noun comes first: "People to contact about the invoice" is about people); the field name is the fallback.
 _NAME_TOK = r"[A-Z\u00C0-\u017F][a-zA-Z'\u2019\u00C0-\u017F-]+"
-NAME_RUN = rf"\b{_NAME_TOK}(?:\s+(?:[A-Z]\.|{_NAME_TOK}|van|von|de|da|del|der|di|la|le|bin|al)){{0,3}}\b"
+NAME_RUN = rf"\b{_NAME_TOK}(?:[ \t]+(?:[A-Z]\.|{_NAME_TOK}|van|von|de|da|del|der|di|la|le|bin|al)){{0,3}}\b"
 _STOP = {"The", "This", "Dear", "Hi", "Hello", "Mr", "Mrs", "Ms", "Dr", "Please", "Thank", "Thanks", "Regards", "Best",
          "Invoice", "Order", "Customer", "Phone", "Email", "Address", "From", "To", "Date", "Subject", "Ref", "Our", "We",
          "Your", "I", "Kind", "Sincerely", "Contact", "Name", "Guest", "Team", "Hey", "Questions", "Total", "Issued",
@@ -71,10 +71,15 @@ def hint_of(name, spec):
 
 
 def _clean_name(v):
-    toks = v.split()
-    while toks and toks[0].strip(".") in _STOP:
+    """A name-pattern match -> (offset of the first kept word in v, the name with single spaces), or None. Leading
+    salutation and label words are dropped; the offset keeps the span on the original text, whatever whitespace (line
+    breaks, double spaces) separates the words."""
+    toks = list(re.finditer(r"\S+", v))
+    while toks and toks[0].group(0).strip(".") in _STOP:
         toks = toks[1:]
-    return " ".join(toks) if toks and toks[0][:3].lower() not in _MONTHS else None
+    if not toks or toks[0].group(0)[:3].lower() in _MONTHS:
+        return None
+    return toks[0].start(), " ".join(t.group(0) for t in toks)
 
 
 def field_question(name, spec):
@@ -172,9 +177,11 @@ def candidates(kind, state, offs, sup, spec, ref):
                 c = _clean_name(v)
                 if not c:
                     continue
-                a = m.start() + v.index(c)
-                v = c
-            out.append((v, a, a + len(v), _score(offs, sup, a, a + len(v))))
+                a += c[0]
+                b, v = m.start() + len(v), c[1]
+            else:
+                b = a + len(v)
+            out.append((v, a, b, _score(offs, sup, a, b)))
     if kind == "text" and not out:
         sv = np.asarray(sup, dtype=float)
         valid = [sv[t] for t, o in enumerate(offs) if o is not None and o[1] > o[0] and t < len(sv)]

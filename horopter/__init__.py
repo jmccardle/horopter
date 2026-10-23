@@ -9,7 +9,7 @@ evidence spans and abstention per question).
 """
 from .client import Client, HoropterError, Local  # noqa: F401
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 
 _TORCH = ("abstain", "evidence", "families", "fields", "losses", "model", "packing", "runtime", "quant", "fast",
           "service", "server", "api")
