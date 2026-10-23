@@ -191,7 +191,8 @@ class Service:
 
         def step():                                # routing + answering: the model's part of the request
             route = {}
-            routed = [q for q in allq if q in qs or field_adapter is None]
+            routed = list(qs)                      # fields skip the router: it re-reads the state per question, and
+            # the adapter hardly changes field answers (all six family adapters tie on the E43-style probes)
             if served[model] == "route" and routed:
                 st.use("router")
                 rp = st.answer_one_each([(F.router_state(state, allq[q]), F.ROUTER_Q) for q in routed])
@@ -202,7 +203,10 @@ class Service:
                                   "router": {f: round(x, 4) for f, x in probs.items()}}
             for qid in allq:
                 if qid not in route:
-                    ad = field_adapter if (qid in hidden and field_adapter) else served[model]
+                    ad = served[model]
+                    if qid in hidden:
+                        ad = field_adapter or (ad if ad != "route" else ("classification" if "classification" in bank
+                                                                         else "base"))
                     route[qid] = {"adapter": ad, "p": 1.0, "router": None}
                 if qid in hidden:
                     route[qid]["own_spans"] = True

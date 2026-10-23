@@ -7,7 +7,8 @@ evidence on. Then:
               the extract adapter, 1 - the peak support score (AUROC 0.995).
 - candidates  every match of the type's pattern anywhere in the state (number, date, time, duration), or the support
               spans themselves (text);
-- value       the candidate with the most support (max over its tokens of the "yes" option's support channel), parsed
+- value       the candidate with the most support (max over its tokens of the "yes" option's support channel, plus a
+              bonus when the field's keywords label it: the text before it on its line, or its block's "Header:"), parsed
               to the type; null when p_null > null_threshold or nothing matches. `guess` keeps the best candidate when
               the value is null.
 - confidence  (1 - p_null) * support of the chosen candidate; p_null when the value is null. Not calibrated.
@@ -77,9 +78,50 @@ def _clean_name(v):
     toks = list(re.finditer(r"\S+", v))
     while toks and toks[0].group(0).strip(".") in _STOP:
         toks = toks[1:]
-    if not toks or toks[0].group(0)[:3].lower() in _MONTHS:
+    if not toks or re.fullmatch(MONTH, toks[0].group(0)):   # "March 15" is a date, not a person ("Jane" is a name)
         return None
     return toks[0].start(), " ".join(t.group(0) for t in toks)
+
+
+_KW_STOP = {"the", "a", "an", "of", "to", "for", "on", "in", "at", "by", "and", "or", "is", "are", "was", "be", "this",
+            "that", "it", "its", "any", "all", "each", "every", "what", "which", "who", "whom", "how", "when", "where",
+            "long", "much", "many", "about", "from", "with", "has", "have", "does", "do", "text", "value", "given",
+            "stated", "mentioned", "listed", "written", "field"}
+LABEL_W = 0.6     # bonus for a candidate whose label (line prefix or section header) names the field
+
+
+def keywords(name, spec):
+    """Content words of the field's instructions and name, lower case, plural s dropped."""
+    words = re.findall(r"[a-z0-9]+", f"{spec.get('instructions') or ''} {re.sub(r'[_.-]+', ' ', name)}".lower())
+    return {w[:-1] if len(w) > 3 and w.endswith("s") else w for w in words if w not in _KW_STOP}
+
+
+def label_of(state, a):
+    """What labels the value at char a in a form-like text: the line's text before it, plus the header of its block
+    (the nearest earlier line ending with ':' with no blank line in between)."""
+    ls = state.rfind("\n", 0, a) + 1
+    lab = state[ls:a]
+    i = ls - 1
+    for _ in range(8):
+        if i <= 0:
+            break
+        ps = state.rfind("\n", 0, i) + 1
+        line = state[ps:i].strip()
+        if not line:
+            break
+        if line.endswith(":"):
+            lab += " " + line
+            break
+        i = ps - 1
+    return lab
+
+
+def label_bonus(kw, state, a):
+    if not kw:
+        return 0.0
+    words = {w[:-1] if len(w) > 3 and w.endswith("s") else w for w in re.findall(r"[a-z0-9]+", label_of(state, a).lower())}
+    hit = len(kw & words)
+    return LABEL_W * min(1.0, hit / min(2, len(kw)))
 
 
 def field_question(name, spec):
@@ -175,8 +217,10 @@ def candidates(kind, state, offs, sup, spec, ref):
             v, a = m.group(0).rstrip(".,;:"), m.start()
             if pat == NAME_RUN:
                 c = _clean_name(v)
-                if not c:
-                    continue
+                if not c or (len(c[1].split()) < 2 and not spec.get("_one_word_names")):
+                    continue                             # a person's name has 2+ words unless a first / last name is asked
+                if state.rfind("(", 0, a) > state.rfind(")", 0, a) and state.rfind("(", 0, a) > state.rfind("\n", 0, a):
+                    continue                             # inside parentheses: a role or note, "(Accounts Payable)"
                 a += c[0]
                 b, v = m.start() + len(v), c[1]
             else:
@@ -214,6 +258,9 @@ def candidates(kind, state, offs, sup, spec, ref):
             v = parse_duration(m, spec.get("unit"))
             if v is not None:
                 out.append((v, m.start(), m.end(), _score(offs, sup, m.start(), m.end())))
+    kw = spec.get("_kw")
+    if kw:
+        out = [(v, a, b, sc + label_bonus(kw, state, a)) for v, a, b, sc in out]
     out.sort(key=lambda c: -c[3])
     return out
 
@@ -233,8 +280,11 @@ def answer(name, spec, state, offs, sup, p_true, peak_p_null=False, reference_da
     """One field's answer (Clairic answer shape). sup: the "yes" option's support score per state token (aligned with
     offs). peak_p_null: p_null = 1 - peak support (extract adapter) instead of 1 - p(yes)."""
     t = spec["type"]
+    spec = dict(spec, _kw=keywords(name, spec))
     if t == "text" or (t == "list" and spec.get("items") == "text"):
-        spec = dict(spec, _hint=hint_of(name, spec))
+        spec["_hint"] = hint_of(name, spec)
+        spec["_one_word_names"] = bool(re.search(r"first|given|last|family|surname|nickname",
+                                                 f"{spec.get('instructions') or ''} {name}".lower()))
     ref = dt.date.fromisoformat(reference_date) if reference_date else dt.date.today()
     valid = [float(s) for o, s in zip(offs, sup) if o and o[1] > o[0]]
     p_null = 1 - (max(valid) if valid else 0.0) if peak_p_null else 1 - float(p_true)
@@ -246,8 +296,13 @@ def answer(name, spec, state, offs, sup, p_true, peak_p_null=False, reference_da
         cs = candidates(kind, state, offs, sup, spec, ref)
         if cs:
             keep_thr = max(0.05, 0.6 * cs[0][3])
+            kw = spec.get("_kw")
+            top_lab = label_bonus(kw, state, cs[0][1])
+
+            def keep(c):   # strong enough, or labelled like the best item (the rest of a "Contacts:" block)
+                return c[3] >= keep_thr or (top_lab > 0 and label_bonus(kw, state, c[1]) >= top_lab)
             seen, items = set(), []
-            for v, a, b, s in sorted((c for c in cs if c[3] >= keep_thr), key=lambda c: c[1]):
+            for v, a, b, s in sorted((c for c in cs if keep(c)), key=lambda c: c[1]):
                 fv = _format(kind, v, spec)
                 if fv not in seen:
                     seen.add(fv)
@@ -255,7 +310,7 @@ def answer(name, spec, state, offs, sup, p_true, peak_p_null=False, reference_da
             if items and p_null <= thr:
                 out["value"] = [x[0] for x in items]
                 out["spans"] = [[x[1], x[2]] for x in items]
-                out["confidence"] = round((1 - p_null) * max(x[3] for x in items), 4)
+                out["confidence"] = round((1 - p_null) * min(1.0, max(x[3] for x in items)), 4)
                 return out
             if items:
                 out["guess"] = [x[0] for x in items]
@@ -283,5 +338,5 @@ def answer(name, spec, state, offs, sup, p_true, peak_p_null=False, reference_da
         return out
     out["value"] = best[0]
     out["span"] = [best[1], best[2]]
-    out["confidence"] = round((1 - p_null) * best[3], 4)
+    out["confidence"] = round((1 - p_null) * min(1.0, best[3]), 4)
     return out

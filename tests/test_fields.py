@@ -83,3 +83,21 @@ def test_names_across_line_breaks():
     a = F.answer("who", {"type": "text", "instructions": "The contact name"}, "Contact\nDana Ruiz", [(0, 7), (8, 12), (13, 17)],
                  [0.1, 0.9, 0.9], 0.95)
     assert a["value"] == "Dana Ruiz" and a["span"] == [8, 17]
+
+
+def test_month_like_names():
+    for n in ("Jane Smith", "Marcus Aurelius", "Juno Reyes", "Octavia Butler", "Decker Lane"):
+        assert F._clean_name(n) == (0, n)
+    assert F._clean_name("March Report") is None and F._clean_name("Sept Totals") is None
+
+
+def test_form_labels():
+    form = ("Contacts:\n- Jane Smith (Accounts Payable) - jane@acme.com\n- Bob Johnson (Procurement) - bob@acme.com\n\n"
+            "Billing Email: billing@acme.com\n\nSubtotal: $9,750.50\nTax (8.5%): $828.79\nTotal: $10,579.29\n")
+    offs = words(form)
+    flat = [0.3] * len(offs)                                   # no evidence preference: the labels decide
+    get = lambda n, spec: F.answer(n, spec, form, offs, flat, 0.95)["value"]   # noqa: E731
+    assert get("total", {"type": "number", "instructions": "The total amount due"}) == 10579.29
+    assert get("email", {"type": "text", "instructions": "The billing email address"}) == "billing@acme.com"
+    assert get("contacts", {"type": "list", "items": "text", "instructions": "People to contact"}) == \
+        ["Jane Smith", "Bob Johnson"]
