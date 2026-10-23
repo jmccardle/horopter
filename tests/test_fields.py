@@ -101,3 +101,20 @@ def test_form_labels():
     assert get("email", {"type": "text", "instructions": "The billing email address"}) == "billing@acme.com"
     assert get("contacts", {"type": "list", "items": "text", "instructions": "People to contact"}) == \
         ["Jane Smith", "Bob Johnson"]
+
+
+def test_typed_hints():
+    doc = ("Dear Klaus Weber, your router (MAC 00:1A:2B:3C:4D:5E) ships from 12 Baker Street, London, W1U 6TY. "
+           "Pay to IBAN DE89 3704 0044 0532 0130 00 and see shop.example.co.uk for details.")
+    offs = words(doc)
+    flat = [0.3] * len(offs)
+    get = lambda spec: F.answer("f", spec, doc, offs, flat, 0.95)   # noqa: E731
+    assert get({"type": "text", "instructions": "The person's first name"})["value"] == "Klaus"
+    assert get({"type": "text", "instructions": "The customer's last name"})["value"] == "Weber"
+    assert get({"type": "text", "instructions": "The MAC address"})["value"] == "00:1A:2B:3C:4D:5E"
+    assert get({"type": "text", "instructions": "The IBAN"})["value"] == "DE89 3704 0044 0532 0130 00"
+    assert get({"type": "text", "instructions": "The domain name"})["value"] == "shop.example.co.uk"
+    assert get({"type": "text", "instructions": "The postal code"})["value"] == "W1U 6TY"
+    note = "Meeting moved to the blue room, see you there."
+    a = F.answer("f", {"type": "text", "instructions": "The phone number"}, note, words(note), [0.3] * 9, 0.95)
+    assert a["value"] is None and "guess" not in a                        # nothing phone-shaped: null, no guess

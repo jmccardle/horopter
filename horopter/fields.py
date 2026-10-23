@@ -35,7 +35,7 @@ DATE = re.compile(
     rf"|\b(?P<m2>{MONTH})\s+(?P<d2>\d{{1,2}}){_ORD}(?:,?\s+(?P<y2>\d{{4}}))?\b"
     r"|\b(?P<iy>\d{4})[-/.](?P<im>\d{1,2})[-/.](?P<id>\d{1,2})\b"
     r"|\b(?P<a>\d{1,2})[-/.](?P<b>\d{1,2})[-/.](?P<c>\d{4}|\d{2})\b", re.I)
-TIME = re.compile(r"\b(?P<h>\d{1,2}):(?P<mi>\d{2})(?::(?P<s>\d{2}))?(?:\s*(?P<ap>[ap])\.?\s?m\b\.?)?"
+TIME = re.compile(r"\b(?P<h>\d{1,2})[:h](?P<mi>\d{2})(?:[:.](?P<s>\d{2}))?(?:\s*(?P<ap>[ap])\.?\s?m\b\.?)?"
                   r"|\b(?P<h2>\d{1,2})\s*(?P<ap2>[ap])\.?\s?m\b\.?", re.I)
 NUMBER = re.compile(r"(?<![\w.])[-−]?(?:[$€£¥]\s?)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?")
 _UNIT_S = {"second": 1, "minute": 60, "hour": 3600, "day": 86400, "week": 604800, "month": 2629800, "year": 31557600}
@@ -52,22 +52,36 @@ _STOP = {"The", "This", "Dear", "Hi", "Hello", "Mr", "Mrs", "Ms", "Dr", "Please"
          "Invoice", "Order", "Customer", "Phone", "Email", "Address", "From", "To", "Date", "Subject", "Ref", "Our", "We",
          "Your", "I", "Kind", "Sincerely", "Contact", "Name", "Guest", "Team", "Hey", "Questions", "Total", "Issued",
          "Payment", "Call", "Ask", "Attn", "Cc", "Signed", "By"}
+_ADDR = (r"\b\d{1,5}[A-Za-z]?\s+(?:[A-Z][\w.'-]*\s?){1,5}(?:,\s*[^,\n]{2,40}){1,4}"
+         r"|\b(?:[A-Z][\w.'-]*\s?){1,4}\d{1,5}[A-Za-z]?(?:,\s*[^,\n]{2,40}){1,4}")
+_ADDR_END = re.compile(r"\.(?:\s|$)|\s(?:and|is|was|are|will|within|after|before|by|dispatched|for|to|which|where|on)\b|\n")
+# (keywords, pattern, post): post picks part of a match ("first" / "last" word of a name, "addr" trims an address run)
 HINTS = [
-    (r"e-?mail", r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"),
-    (r"phone|telephone|mobile|cell|fax", r"(?:\+|\b)\d[\d ()./-]{5,}\d\b|\+?\(\d[\d ()./-]{5,}\d\b"),
-    (r"\burls?\b|website|web site|\blinks?\b", r"https?://[^\s)>\]\"']+|\bwww\.[^\s)>\]\"']+"),
-    (r"\bip\b", r"\b(?:\d{1,3}\.){3}\d{1,3}\b|\b[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{0,4}){2,7}\b"),
+    (r"e-?mail", r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", None),
+    (r"phone|telephone|mobile|\bcell\b|\bfax\b", r"(?:\+|\b)\d[\d ()./-]{5,}\d\b|\+?\(\d[\d ()./-]{5,}\d\b", None),
+    (r"\burls?\b|website|web site|web address|\blinks?\b", r"\b[a-zA-Z][a-zA-Z0-9+.-]*://[^\s<>\"')\]]+|\bwww\.[^\s<>\"')\]]+", None),
+    (r"\bmac\b", r"\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b|\b(?:[0-9A-Fa-f]{4}\.){2}[0-9A-Fa-f]{4}\b", None),
+    (r"\bip\b", r"\b(?:\d{1,3}\.){3}\d{1,3}\b|\b[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{0,4}){2,7}\b", None),
+    (r"\biban\b", r"\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b", None),
+    (r"\bdomains?\b|host ?name", r"\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b", None),
+    (r"postal code|post code|postcode|zip", r"\b[A-Z]{1,2}\d[A-Z\d]? ?\d[A-Z]{2}\b|\b\d{5}(?:-\d{4})?\b"
+     r"|\b[A-Z]\d[A-Z] ?\d[A-Z]\d\b|\b\d{4,6}\b|\b\d{3}-\d{4}\b", None),
+    (r"postal address|street address|mailing address|shipping address|delivery address|billing address|\baddress\b",
+     _ADDR, "addr"),
     (r"invoice|order|tracking|serial|reference|\bref\b|\bpo\b|purchase order|ticket|account|\bids?\b|\bcodes?\b|"
-     r"\bsku\b|confirmation|booking", r"\b(?=[A-Za-z0-9/_-]*\d)[A-Za-z0-9][A-Za-z0-9/_-]{2,}\b"),
-    (r"\bnames?\b|\bpersons?\b|people|\bcontacts?\b|\bwho\b", NAME_RUN),
+     r"\bsku\b|confirmation|booking", r"\b(?=[A-Za-z0-9/_-]*\d)[A-Za-z0-9][A-Za-z0-9/_-]{2,}\b", None),
+    (r"first name|given name|forename", NAME_RUN, "first"),
+    (r"family name|last name|surname", NAME_RUN, "last"),
+    (r"\bnames?\b|people|\bcontacts?\b|\bwho\b", NAME_RUN, None),
 ]
 
 
 def hint_of(name, spec):
+    """-> (pattern, post) of the hint whose keyword comes first in the instructions (else the name), or None."""
     for text in (spec.get("instructions") or "", re.sub(r"[_.\-]+", " ", name)):
-        hits = [(m.start(), i) for i, (kw, _) in enumerate(HINTS) for m in [re.search(kw, text.lower())] if m]
+        hits = [(m.start(), -len(m.group(0)), i) for i, (kw, _, _) in enumerate(HINTS) for m in [re.search(kw, text.lower())] if m]
         if hits:
-            return HINTS[min(hits)[1]][1]
+            return HINTS[min(hits)[2]][1:]
     return None
 
 
@@ -211,7 +225,7 @@ def parse_duration(m, unit):
 def candidates(kind, state, offs, sup, spec, ref):
     """-> [(value, start, end, support)] for one item type, strongest first."""
     out = []
-    pat = spec.get("_hint") if kind == "text" else None
+    pat, post = (spec.get("_hint") or (None, None)) if kind == "text" else (None, None)
     if pat:
         for m in re.finditer(pat, state):
             v, a = m.group(0).rstrip(".,;:"), m.start()
@@ -223,10 +237,19 @@ def candidates(kind, state, offs, sup, spec, ref):
                     continue                             # inside parentheses: a role or note, "(Accounts Payable)"
                 a += c[0]
                 b, v = m.start() + len(v), c[1]
+                if post in ("first", "last"):            # one word of a full name, spanned on its own
+                    ws = list(re.finditer(r"\S+", state[a:b]))
+                    if len(ws) < 2:
+                        continue
+                    w = ws[0] if post == "first" else ws[-1]
+                    a, b, v = a + w.start(), a + w.end(), w.group(0)
             else:
+                if post == "addr":                       # the comma-run overruns into the sentence: cut at its end
+                    e = _ADDR_END.search(v)
+                    v = v[:e.start()].rstrip(" ,;:") if e else v
                 b = a + len(v)
             out.append((v, a, b, _score(offs, sup, a, b)))
-    if kind == "text" and not out:
+    if kind == "text" and not out and not pat:          # a typed hint with no match means absent: no free spans
         sv = np.asarray(sup, dtype=float)
         valid = [sv[t] for t, o in enumerate(offs) if o is not None and o[1] > o[0] and t < len(sv)]
         thr = max(0.05, 0.6 * max(valid)) if valid else 0.5
