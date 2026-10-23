@@ -12,11 +12,25 @@ The machine-readable spec is [`openapi.json`](openapi.json). A running server al
 ## Start a server
 
 ```bash
-pip install horopter
+pip install "horopter[server]"
 python -m horopter.server --model jmccardle/horopter-0.4B --device cpu --port 8420     # add --fast for the state cache
 ```
 
 The first start downloads the model, about 0.8 GB. Later starts load in about 12 s on a CPU. Every example below uses `curl` against `http://127.0.0.1:8420`; the outputs shown are real, from Horopter-0.4B on a CPU.
+
+## From Python
+
+`pip install horopter` is enough to call a server; `horopter.local(...)` (with `[torch]`) runs the same requests in your own process and returns the same dicts.
+
+```python
+import horopter
+h = horopter.connect("http://127.0.0.1:8420")       # or horopter.local("jmccardle/horopter-0.4B", device="cpu")
+r = h.decide(state, questions={...}, fields={...}, evidence="chosen", reference_date="2026-10-22")
+h.decide(state, fields={...}, route="clairic")       # route: horopter (default) | systemone | clairic
+h.models(); h.health()
+```
+
+Errors raise `horopter.HoropterError` with `.status` and `.detail`, whether local or remote.
 
 ## Routes
 

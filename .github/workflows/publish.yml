@@ -35,6 +35,34 @@ permissions:
   contents: read
 
 jobs:
+  test-client:
+    name: Bare install, client only (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install with no extras (no torch, no numpy, no pydantic)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install . pytest
+          if python -c "import torch" 2>/dev/null; then echo "torch must not be installed here" >&2; exit 1; fi
+
+      - name: pytest (client)
+        shell: bash
+        run: |
+          set -euo pipefail
+          pytest -q tests/test_client.py
+
   test:
     name: Tests (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
@@ -56,18 +84,18 @@ jobs:
           python -m pip install --upgrade pip
           # CPU wheels: the CUDA build is about 2 GB and the runner has no GPU.
           pip install torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
-          pip install '.[test]'
+          pip install '.[server,test]'
 
       - name: pytest
         shell: bash
-        # test_parity / test_fast skip themselves without exported weights; test_package always runs.
+        # test_parity / test_fast skip themselves without exported weights; the rest always run.
         run: |
           set -euo pipefail
           pytest -q tests
 
   build:
     name: Build wheel and sdist
-    needs: [test]
+    needs: [test, test-client]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -3,13 +3,13 @@
  "info": {
   "title": "Horopter",
   "description": "Typed decisions (Jev System One questions) and typed extraction (Clairic fields) over one cached state, with relation, abstention and evidence spans.",
-  "version": "0.0.1"
+  "version": "0.0.2"
  },
  "paths": {
   "/healthz": {
    "get": {
-    "summary": "Healthz",
-    "operationId": "healthz_healthz_get",
+    "summary": "Health",
+    "operationId": "health_healthz_get",
     "responses": {
      "200": {
       "description": "Successful Response",

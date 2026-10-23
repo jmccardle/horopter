@@ -2,7 +2,10 @@
 """Field extraction (horopter.fields) with a hand-made support signal: runs without model weights."""
 import re
 
-from horopter import fields as F
+import pytest
+
+pytest.importorskip("numpy")
+from horopter import fields as F  # noqa: E402
 
 INVOICE = ("Invoice INV-2291 from Northwind Supplies. Issued September 2, 2026. Payment terms: net 30. "
            "Total due: $1,080.00. Questions? Contact Dana Ruiz or Priya Shah at billing@northwind.example.")

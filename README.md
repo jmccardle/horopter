@@ -44,17 +44,24 @@ docs/         release plan, porting notes (docs/PORTING.md), fast path (docs/FAS
 assets/       theme art (public domain)
 ```
 
-```bash
-pip install horopter
-```
+| install | what you get |
+|---|---|
+| `pip install horopter` | the HTTP client (`horopter.connect`), standard library only: no model, no torch |
+| `pip install "horopter[client]"` | the client with httpx (connection pooling) |
+| `pip install "horopter[torch]"` | the model in your process (`horopter.local`, `horopter.load`) |
+| `pip install "horopter[server]"` | the model plus the HTTP server (`python -m horopter.server`) |
 
-The first `load` of a hub id downloads the weights from Hugging Face (about 0.8 GB for the 0.4B) and caches them.
+The same code runs against a server or a model in your own process, and gets the same answers:
 
 ```python
 import horopter
-m = horopter.load("jmccardle/horopter-0.4B")    # a hub id, or a local directory in the exported HF layout
-out = m.answer("Refunds within 30 days. The lamp was bought 12 days ago.",
-               {"q": {"type": "noul", "instructions": "Is a refund allowed?"}}, evidence=True)
+h = horopter.connect("http://127.0.0.1:8420")     # a running server; or:
+h = horopter.local("jmccardle/horopter-0.4B")      # the model in this process (first use downloads ~0.8 GB)
+r = h.decide("Refunds within 30 days. The lamp was bought 12 days ago.",
+             questions={"refund": {"type": "noul", "instructions": "Is a refund allowed?"}},
+             fields={"days": {"type": "duration", "unit": "days", "instructions": "How long ago it was bought"}},
+             evidence="chosen")
+r["answers"]["refund"]["noul"], r["answers"]["days"]["value"]
 ```
 
 Server: `python -m horopter.server --model jmccardle/horopter-0.4B --port 8420 --fast` (add `--device cpu` on a machine without a GPU). It speaks Jev's System One format (`/v1/systemone`: typed questions) and Cloudflare's Clairic format (`/v1/clairic`: typed field extraction), with both in one request at `/v1/horopter`. Walkthrough: [docs/API.md](docs/API.md); spec: [docs/openapi.json](docs/openapi.json).

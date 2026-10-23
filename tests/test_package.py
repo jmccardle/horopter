@@ -1,7 +1,11 @@
 # SPDX-License-Identifier: MIT
 """Package smoke test: runs without model weights (CI), unlike test_parity / test_fast."""
+import pytest
+
 import horopter
-from horopter import server
+
+pytest.importorskip("pydantic")
+from horopter import server  # noqa: E402
 
 
 def test_version():

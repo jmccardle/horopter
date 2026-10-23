@@ -17,16 +17,7 @@ classifiers = [
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-dependencies = [
-    "torch>=2.1",
-    "transformers>=4.48,<5",  # 5.x changed the ModernBERT layer call (position_embeddings)
-    "safetensors",
-    "numpy",
-    "huggingface_hub",
-    "fastapi",
-    "uvicorn",
-    "pydantic>=2",
-]
+dependencies = []   # the HTTP client (horopter.connect) is standard library only
 
 [project.urls]
 Homepage = "https://github.com/jmccardle/horopter"
@@ -34,9 +25,17 @@ Homepage = "https://github.com/jmccardle/horopter"
 "Model (1B)" = "https://huggingface.co/jmccardle/horopter-1B"
 
 [project.optional-dependencies]
-server = ["fastapi", "uvicorn", "pydantic>=2"]
-training = ["pandas", "scipy"]
-hub = ["huggingface_hub"]
+client = ["httpx"]
+torch = [
+    "torch>=2.1",
+    "transformers>=4.48,<5",  # 5.x changed the ModernBERT layer call (position_embeddings)
+    "safetensors",
+    "numpy",
+    "huggingface_hub",
+    "pydantic>=2",
+]
+server = ["horopter[torch]", "fastapi", "uvicorn"]
+training = ["horopter[torch]", "pandas", "scipy"]
 test = ["pytest", "httpx"]
 
 [tool.setuptools]
