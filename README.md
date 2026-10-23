@@ -34,7 +34,7 @@ The full tables and limits are in the model cards. Grounding and relation are le
 ## Layout
 
 ```
-horopter/     model, packing, losses, runtime (adapters), evidence, abstention, server (typed wire format)
+horopter/     model, packing, losses, runtime (adapters), evidence, abstention, fields (typed extraction), api + server (wire format)
 horopter/fast/  fast path: state cache, CUDA graphs, block-sparse state attention, all adapters in one pass
 training/     joint trainer, adapter / evidence trainers, abstention head fit, data builders, recipes/beta2.md
 eval/         benchmark scorers (E37 bench, E40 rule evals) and the HTTP client
@@ -57,7 +57,7 @@ out = m.answer("Refunds within 30 days. The lamp was bought 12 days ago.",
                {"q": {"type": "noul", "instructions": "Is a refund allowed?"}}, evidence=True)
 ```
 
-Server: `python -m horopter.server --model jmccardle/horopter-0.4B --port 8420 --fast` (add `--device cpu` on a machine without a GPU).
+Server: `python -m horopter.server --model jmccardle/horopter-0.4B --port 8420 --fast` (add `--device cpu` on a machine without a GPU). It speaks Jev's System One format (`/v1/systemone`: typed questions) and Cloudflare's Clairic format (`/v1/clairic`: typed field extraction), with both in one request at `/v1/horopter`. Walkthrough: [docs/API.md](docs/API.md); spec: [docs/openapi.json](docs/openapi.json).
 
 `--fast` serves the same answers (up to bf16 rounding) 3–19× faster on a GPU, and caches states on a CPU: a state asked
 about again costs only its question tokens. Measurements, settings and memory are in [docs/FAST_PATH.md](docs/FAST_PATH.md).

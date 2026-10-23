@@ -635,14 +635,16 @@ def serve_request(ms, state, qs, route, evidence, bank=None):
     for qid in qs:
         by[route[qid]["adapter"]].append((qid, qs[qid]))
     ev_ad = "evidence" in bank and bool(evidence)
-    jobs = [(a, by[a], bool(evidence) and not ev_ad) for a in sorted(by)]
-    if ev_ad:
-        jobs.append(("evidence", list(qs.items()), True))
+    own = {q for q in qs if route[q].get("own_spans")}   # e.g. field questions: spans from their own adapter
+    jobs = [(a, by[a], bool(evidence) and (not ev_ad or any(q in own for q, _ in by[a]))) for a in sorted(by)]
+    others = [(q, qs[q]) for q in qs if q not in own]
+    if ev_ad and others:
+        jobs.append(("evidence", others, True))
     outs = ms.run(state, jobs, evidence=evidence)
     res = {}
     for o in outs[: len(by)]:
         res.update(o)
-    if ev_ad:
+    if ev_ad and others:
         for qid, d in outs[-1].items():
             res[qid]["ev"] = d["ev"]
     return res

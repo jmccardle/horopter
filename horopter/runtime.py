@@ -196,6 +196,25 @@ class Student:
         return self.abstain_head.served(d) if self.abstain_head is not None else A.placeholder(d)
 
 
+def answer_routed(st, state, qs, route, evidence):
+    """route {qid: {"adapter": name, "own_spans": bool}} -> {qid: Student.answer dict}. Spans come from the "evidence"
+    adapter when one is loaded (its answers are not used), except for own_spans questions, which keep their own
+    adapter's spans (field extraction: E43 found the family adapters' spans hit the value more often)."""
+    res = {}
+    ev_ad = "evidence" in st.bank and bool(evidence)
+    own = {q for q in qs if route[q].get("own_spans")}
+    for ad in sorted({route[q]["adapter"] for q in qs}):
+        sub = {q: qs[q] for q in qs if route[q]["adapter"] == ad}
+        st.use(ad)
+        res.update(st.answer(state, sub, evidence=bool(evidence) and (not ev_ad or any(q in own for q in sub))))
+    others = {q: qs[q] for q in qs if q not in own}
+    if ev_ad and others:
+        st.use("evidence")
+        for qid, d in st.answer(state, others, evidence=True).items():
+            res[qid]["ev"] = d["ev"]
+    return res
+
+
 # ---------------------------------------------------------------------------------------------------------- loaders
 def build_trunk(base_config, ckpt_model, ckpt_answer, base=None):
     """(transformers config, model state dict, answer state dict) -> (HoropterModel, Answer), weights loaded.

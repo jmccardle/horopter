@@ -1,0 +1,1219 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "Horopter",
+  "description": "Typed decisions (Jev System One questions) and typed extraction (Clairic fields) over one cached state, with relation, abstention and evidence spans.",
+  "version": "0.0.1"
+ },
+ "paths": {
+  "/healthz": {
+   "get": {
+    "summary": "Healthz",
+    "operationId": "healthz_healthz_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/models": {
+   "get": {
+    "summary": "Models",
+    "operationId": "models_v1_models_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/systemone": {
+   "post": {
+    "summary": "Jev System One route (questions; fields accepted too)",
+    "operationId": "systemone_v1_systemone_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DecideRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/DecideResponse"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/horopter": {
+   "post": {
+    "summary": "Questions and fields over one state",
+    "operationId": "horopter_route_v1_horopter_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DecideRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/DecideResponse"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/clairic": {
+   "post": {
+    "summary": "Clairic route (fields; questions accepted too)",
+    "operationId": "clairic_route_v1_clairic_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DecideRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/DecideResponse"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/ai/run/@cf/cloudflare/clairic": {
+   "post": {
+    "summary": "Workers AI REST shape of the Clairic route",
+    "operationId": "workers_ai_run__cf_cloudflare_clairic_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DecideRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WorkersAIResponse"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "schemas": {
+   "Answer": {
+    "properties": {
+     "type": {
+      "type": "string",
+      "title": "Type"
+     },
+     "noul": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Noul"
+     },
+     "choice": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Choice"
+     },
+     "score": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Score"
+     },
+     "confidence": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Confidence"
+     },
+     "probabilities": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "type": "number"
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Probabilities"
+     },
+     "legend": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Legend"
+     },
+     "value": {
+      "anyOf": [
+       {},
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Value"
+     },
+     "guess": {
+      "anyOf": [
+       {},
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Guess"
+     },
+     "p_null": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "P Null"
+     },
+     "span": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "integer"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Span"
+     },
+     "spans": {
+      "anyOf": [
+       {
+        "items": {
+         "items": {
+          "type": "integer"
+         },
+         "type": "array"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Spans"
+     },
+     "horopter": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Horopter",
+      "description": "relation, abstain, evidence (mbnli on mbnli-* names)"
+     }
+    },
+    "additionalProperties": true,
+    "type": "object",
+    "required": [
+     "type"
+    ],
+    "title": "Answer",
+    "description": "One answer. Questions: Jev fields (noul | choice, confidence, probabilities | score, confidence, legend,\nprobabilities). Fields: Clairic fields (value, guess, p_null, confidence, span | spans)."
+   },
+   "Asset": {
+    "properties": {
+     "format": {
+      "type": "string",
+      "enum": [
+       "png",
+       "jpg",
+       "jpeg"
+      ],
+      "title": "Format"
+     },
+     "data_base64": {
+      "type": "string",
+      "title": "Data Base64"
+     },
+     "type": {
+      "anyOf": [
+       {
+        "type": "string",
+        "const": "image"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Type"
+     }
+    },
+    "type": "object",
+    "required": [
+     "format",
+     "data_base64"
+    ],
+    "title": "Asset",
+    "description": "Jev 1.14 image asset, referenced by its key in backticks from the state or instructions."
+   },
+   "Base64Image": {
+    "properties": {
+     "content_type": {
+      "type": "string",
+      "title": "Content Type"
+     },
+     "base64": {
+      "type": "string",
+      "title": "Base64"
+     }
+    },
+    "type": "object",
+    "required": [
+     "content_type",
+     "base64"
+    ],
+    "title": "Base64Image"
+   },
+   "BoxQuestion": {
+    "properties": {
+     "type": {
+      "type": "string",
+      "const": "box",
+      "title": "Type"
+     },
+     "instructions": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "items": {},
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Instructions",
+      "description": "Jev 1.14: locate something in an image. Reserved: this model has no image input yet, and refuses box questions."
+     }
+    },
+    "type": "object",
+    "required": [
+     "type"
+    ],
+    "title": "BoxQuestion"
+   },
+   "ChoiceQuestion": {
+    "properties": {
+     "type": {
+      "type": "string",
+      "const": "choice",
+      "title": "Type"
+     },
+     "instructions": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "items": {},
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Instructions"
+     },
+     "criteria": {
+      "additionalProperties": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "additionalProperties": true,
+         "type": "object"
+        },
+        {
+         "items": {},
+         "type": "array"
+        }
+       ]
+      },
+      "type": "object",
+      "title": "Criteria",
+      "description": "Option name -> description; at least 2."
+     }
+    },
+    "type": "object",
+    "required": [
+     "type",
+     "criteria"
+    ],
+    "title": "ChoiceQuestion"
+   },
+   "DecideRequest": {
+    "properties": {
+     "model": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Model",
+      "description": "A served model name (GET /v1/models); `clairic` maps to the default model."
+     },
+     "state": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "items": {},
+        "type": "array"
+       }
+      ],
+      "title": "State",
+      "description": "Text, or JSON (rendered with sorted keys).",
+      "default": ""
+     },
+     "questions": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/NoulQuestion"
+          },
+          {
+           "$ref": "#/components/schemas/ChoiceQuestion"
+          },
+          {
+           "$ref": "#/components/schemas/ScoreQuestion"
+          },
+          {
+           "$ref": "#/components/schemas/BoxQuestion"
+          }
+         ]
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Questions",
+      "description": "Jev typed questions, by id."
+     },
+     "fields": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "$ref": "#/components/schemas/FieldSpec"
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Fields",
+      "description": "Clairic typed fields, by name."
+     },
+     "assets": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "$ref": "#/components/schemas/Asset"
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Assets",
+      "description": "Jev image assets (refused by this model)."
+     },
+     "images": {
+      "anyOf": [
+       {
+        "items": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "$ref": "#/components/schemas/Base64Image"
+          }
+         ]
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Images",
+      "description": "Clairic images (refused by this model)."
+     },
+     "reference_date": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reference Date",
+      "description": "ISO date anchoring dates written without a year."
+     },
+     "options": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Options"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "horopter": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Extensions"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "mbnli": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Extensions"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "type": "object",
+    "title": "DecideRequest"
+   },
+   "DecideResponse": {
+    "properties": {
+     "model": {
+      "type": "string",
+      "title": "Model"
+     },
+     "usage": {
+      "$ref": "#/components/schemas/Usage"
+     },
+     "answers": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/Answer"
+      },
+      "type": "object",
+      "title": "Answers"
+     },
+     "truncated": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Truncated"
+     },
+     "state_text": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "State Text"
+     },
+     "horopter": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Horopter",
+      "description": "version, state_id, timings (mbnli on mbnli-* names)"
+     }
+    },
+    "additionalProperties": true,
+    "type": "object",
+    "required": [
+     "model",
+     "usage",
+     "answers"
+    ],
+    "title": "DecideResponse"
+   },
+   "Extensions": {
+    "properties": {
+     "evidence": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Evidence",
+      "description": "{\"mode\": \"off\" | \"chosen\" | \"all\", \"threshold\": 0..1}: evidence spans per question answer."
+     },
+     "allow_truncation": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Allow Truncation"
+     },
+     "debug": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Debug",
+      "description": "Add routing and hidden-question details."
+     }
+    },
+    "additionalProperties": true,
+    "type": "object",
+    "title": "Extensions",
+    "description": "Horopter request options (also accepted under the key `mbnli`)."
+   },
+   "FieldSpec": {
+    "properties": {
+     "type": {
+      "type": "string",
+      "enum": [
+       "text",
+       "number",
+       "date",
+       "time",
+       "datetime",
+       "duration",
+       "list",
+       "estimate",
+       "forecast"
+      ],
+      "title": "Type"
+     },
+     "instructions": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Instructions",
+      "description": "What the field should contain."
+     },
+     "unit": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Unit",
+      "description": "Durations: seconds, minutes, hours, days, weeks, months, years."
+     },
+     "integer": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Integer"
+     },
+     "decimals": {
+      "anyOf": [
+       {
+        "type": "integer",
+        "maximum": 6.0,
+        "minimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Decimals"
+     },
+     "items": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "text",
+         "number",
+         "date"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Items",
+      "description": "Required for list fields."
+     },
+     "min": {
+      "anyOf": [
+       {},
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Min"
+     },
+     "max": {
+      "anyOf": [
+       {},
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Max"
+     },
+     "step": {
+      "anyOf": [
+       {},
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Step"
+     },
+     "scale": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "linear",
+         "log"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scale"
+     },
+     "null_threshold": {
+      "anyOf": [
+       {
+        "type": "number",
+        "maximum": 1.0,
+        "exclusiveMinimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Null Threshold",
+      "description": "p_null above which the value is null (default 0.5)."
+     },
+     "horizon": {
+      "anyOf": [
+       {
+        "type": "integer",
+        "maximum": 64.0,
+        "minimum": 1.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Horizon"
+     },
+     "interval": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Interval"
+     }
+    },
+    "type": "object",
+    "required": [
+     "type"
+    ],
+    "title": "FieldSpec"
+   },
+   "HTTPValidationError": {
+    "properties": {
+     "detail": {
+      "items": {
+       "$ref": "#/components/schemas/ValidationError"
+      },
+      "type": "array",
+      "title": "Detail"
+     }
+    },
+    "type": "object",
+    "title": "HTTPValidationError"
+   },
+   "NoulQuestion": {
+    "properties": {
+     "type": {
+      "type": "string",
+      "const": "noul",
+      "title": "Type"
+     },
+     "instructions": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "items": {},
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Instructions",
+      "description": "The yes/no question. Missing: the question id is used."
+     },
+     "criteria": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "additionalProperties": true,
+           "type": "object"
+          },
+          {
+           "items": {},
+           "type": "array"
+          }
+         ]
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Criteria",
+      "description": "Optional descriptions of `true` and `false`."
+     }
+    },
+    "type": "object",
+    "required": [
+     "type"
+    ],
+    "title": "NoulQuestion"
+   },
+   "Options": {
+    "properties": {
+     "include_quantiles": {
+      "type": "boolean",
+      "title": "Include Quantiles",
+      "default": false
+     },
+     "return_state_text": {
+      "type": "boolean",
+      "title": "Return State Text",
+      "default": false
+     },
+     "allow_truncation": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Allow Truncation",
+      "description": "Read the first window of a too-long state instead of refusing (default: true on Clairic routes, else false)."
+     }
+    },
+    "type": "object",
+    "title": "Options"
+   },
+   "ScoreQuestion": {
+    "properties": {
+     "type": {
+      "type": "string",
+      "const": "score",
+      "title": "Type"
+     },
+     "instructions": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "items": {},
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Instructions"
+     },
+     "criteria": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "additionalProperties": true,
+         "type": "object"
+        },
+        {
+         "items": {},
+         "type": "array"
+        }
+       ]
+      },
+      "type": "array",
+      "title": "Criteria",
+      "description": "Ordered levels, lowest first; at least 2."
+     }
+    },
+    "type": "object",
+    "required": [
+     "type",
+     "criteria"
+    ],
+    "title": "ScoreQuestion"
+   },
+   "Usage": {
+    "properties": {
+     "input_tokens": {
+      "type": "integer",
+      "title": "Input Tokens"
+     },
+     "output_tokens": {
+      "type": "integer",
+      "title": "Output Tokens"
+     },
+     "state_tokens": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "State Tokens"
+     },
+     "image_tokens": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Image Tokens"
+     },
+     "schema_tokens": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Schema Tokens"
+     },
+     "passes": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Passes"
+     }
+    },
+    "additionalProperties": true,
+    "type": "object",
+    "required": [
+     "input_tokens",
+     "output_tokens"
+    ],
+    "title": "Usage"
+   },
+   "ValidationError": {
+    "properties": {
+     "loc": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ]
+      },
+      "type": "array",
+      "title": "Location"
+     },
+     "msg": {
+      "type": "string",
+      "title": "Message"
+     },
+     "type": {
+      "type": "string",
+      "title": "Error Type"
+     },
+     "input": {
+      "title": "Input"
+     },
+     "ctx": {
+      "type": "object",
+      "title": "Context"
+     }
+    },
+    "type": "object",
+    "required": [
+     "loc",
+     "msg",
+     "type"
+    ],
+    "title": "ValidationError"
+   },
+   "WorkersAIResponse": {
+    "properties": {
+     "result": {
+      "$ref": "#/components/schemas/DecideResponse"
+     },
+     "success": {
+      "type": "boolean",
+      "title": "Success"
+     },
+     "errors": {
+      "items": {},
+      "type": "array",
+      "title": "Errors"
+     },
+     "messages": {
+      "items": {},
+      "type": "array",
+      "title": "Messages"
+     }
+    },
+    "additionalProperties": true,
+    "type": "object",
+    "required": [
+     "result",
+     "success",
+     "errors",
+     "messages"
+    ],
+    "title": "WorkersAIResponse"
+   }
+  }
+ }
+}

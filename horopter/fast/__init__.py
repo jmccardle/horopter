@@ -34,6 +34,8 @@ from concurrent.futures import Future
 
 import torch
 
+from ..runtime import answer_routed
+
 __all__ = ["FastPath", "to_bf16"]
 
 
@@ -124,17 +126,7 @@ class FastPath:
         if self.ms is not None:
             from .multilora import serve_request
             return serve_request(self.ms, state, qs, route, evidence)
-        st, res = self.st, {}
-        ev_ad = "evidence" in st.bank and evidence
-        for ad in sorted({r["adapter"] for r in route.values()}):
-            st.use(ad)
-            res.update(st.answer(state, {q: qs[q] for q in qs if route[q]["adapter"] == ad},
-                                 evidence=bool(evidence) and not ev_ad))
-        if ev_ad:
-            st.use("evidence")
-            for qid, d in st.answer(state, qs, evidence=True).items():
-                res[qid]["ev"] = d["ev"]
-        return res
+        return answer_routed(self.st, state, qs, route, evidence)
 
     def put_state(self, state):
         """Encode a (rendered) state into the cache now, so a later question about it costs only the question pass."""
