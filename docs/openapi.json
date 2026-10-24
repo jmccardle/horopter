@@ -3,7 +3,7 @@
  "info": {
   "title": "Horopter",
   "description": "Typed decisions (Jev System One questions) and typed extraction (Clairic fields) over one cached state, with relation, abstention and evidence spans.",
-  "version": "0.0.4"
+  "version": "0.0.5"
  },
  "paths": {
   "/healthz": {
@@ -135,6 +135,44 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/DecideResponse"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/tokenize": {
+   "post": {
+    "summary": "The state as the model reads it: token count, limit, character offsets per token",
+    "operationId": "tokenize_v1_tokenize_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/TokenizeRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TokenizeResponse"
         }
        }
       }
@@ -379,6 +417,7 @@
       "title": "Type"
      }
     },
+    "additionalProperties": false,
     "type": "object",
     "required": [
      "format",
@@ -398,6 +437,7 @@
       "title": "Base64"
      }
     },
+    "additionalProperties": false,
     "type": "object",
     "required": [
      "content_type",
@@ -433,6 +473,7 @@
       "description": "Jev 1.14: locate something in an image. Reserved: this model has no image input yet, and refuses box questions."
      }
     },
+    "additionalProperties": false,
     "type": "object",
     "required": [
      "type"
@@ -486,6 +527,7 @@
       "description": "Option name -> description; at least 2."
      }
     },
+    "additionalProperties": false,
     "type": "object",
     "required": [
      "type",
@@ -529,7 +571,7 @@
       "anyOf": [
        {
         "additionalProperties": {
-         "anyOf": [
+         "oneOf": [
           {
            "$ref": "#/components/schemas/NoulQuestion"
           },
@@ -542,7 +584,16 @@
           {
            "$ref": "#/components/schemas/BoxQuestion"
           }
-         ]
+         ],
+         "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+           "box": "#/components/schemas/BoxQuestion",
+           "choice": "#/components/schemas/ChoiceQuestion",
+           "noul": "#/components/schemas/NoulQuestion",
+           "score": "#/components/schemas/ScoreQuestion"
+          }
+         }
         },
         "type": "object"
        },
@@ -646,8 +697,30 @@
         "type": "null"
        }
       ]
+     },
+     "evidence": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "off",
+         "chosen",
+         "all"
+        ]
+       },
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Evidence",
+      "description": "Shorthand for horopter.evidence: a mode (\"chosen\") or the full object."
      }
     },
+    "additionalProperties": false,
     "type": "object",
     "title": "DecideRequest"
    },
@@ -751,7 +824,7 @@
       "description": "Add routing and hidden-question details."
      }
     },
-    "additionalProperties": true,
+    "additionalProperties": false,
     "type": "object",
     "title": "Extensions",
     "description": "Horopter request options (also accepted under the key `mbnli`)."
@@ -919,6 +992,7 @@
       "title": "Interval"
      }
     },
+    "additionalProperties": false,
     "type": "object",
     "required": [
      "type"
@@ -993,6 +1067,7 @@
       "description": "Optional descriptions of `true` and `false`."
      }
     },
+    "additionalProperties": false,
     "type": "object",
     "required": [
      "type"
@@ -1024,6 +1099,7 @@
       "description": "Read the first window of a too-long state instead of refusing (default: true on Clairic routes, else false)."
      }
     },
+    "additionalProperties": false,
     "type": "object",
     "title": "Options"
    },
@@ -1074,12 +1150,107 @@
       "description": "Ordered levels, lowest first; at least 2."
      }
     },
+    "additionalProperties": false,
     "type": "object",
     "required": [
      "type",
      "criteria"
     ],
     "title": "ScoreQuestion"
+   },
+   "TokenizeRequest": {
+    "properties": {
+     "model": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Model",
+      "description": "A served model name (all share one tokenizer); checked if given."
+     },
+     "state": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "items": {},
+        "type": "array"
+       }
+      ],
+      "title": "State",
+      "description": "Text, or JSON (rendered with sorted keys), as in a request.",
+      "default": ""
+     }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "title": "TokenizeRequest"
+   },
+   "TokenizeResponse": {
+    "properties": {
+     "state_text": {
+      "type": "string",
+      "title": "State Text",
+      "description": "The rendered state: the text that span offsets index into."
+     },
+     "state_tokens": {
+      "type": "integer",
+      "title": "State Tokens",
+      "description": "Tokens in the whole rendered state."
+     },
+     "limit": {
+      "type": "integer",
+      "title": "Limit",
+      "description": "Tokens this model reads; a longer state is a 413 (or truncated on request)."
+     },
+     "truncated": {
+      "type": "boolean",
+      "title": "Truncated",
+      "description": "state_tokens > limit."
+     },
+     "read_chars": {
+      "type": "integer",
+      "title": "Read Chars",
+      "description": "Characters of state_text inside the window (all of it if not truncated)."
+     },
+     "offsets": {
+      "items": {
+       "items": {
+        "type": "integer"
+       },
+       "type": "array"
+      },
+      "type": "array",
+      "title": "Offsets",
+      "description": "[start, end) character offsets of each token in state_text."
+     },
+     "state_id": {
+      "type": "string",
+      "title": "State Id",
+      "description": "The id decide() reports for this state (sha256 of state_text)."
+     }
+    },
+    "additionalProperties": true,
+    "type": "object",
+    "required": [
+     "state_text",
+     "state_tokens",
+     "limit",
+     "truncated",
+     "read_chars",
+     "offsets",
+     "state_id"
+    ],
+    "title": "TokenizeResponse"
    },
    "Usage": {
     "properties": {

@@ -44,8 +44,13 @@ Errors raise `horopter.HoropterError` with `.status` and `.detail`, whether loca
 | `POST /ai/run/@cf/cloudflare/clairic` | Workers AI REST clients | `{"result": <shared response>, "success": true, "errors": [], "messages": []}` |
 | `POST /client/v4/accounts/{id}/ai/run/@cf/cloudflare/clairic` | the same, with Cloudflare's account path | as above |
 | `POST /v1/horopter` | our own name for the shared handler | the shared response |
+| `POST /v1/tokenize` | the state as the model reads it: rendered text, token count, limit, each token's character offsets | see [Token counts and offsets](#token-counts-and-offsets) |
 | `GET /v1/models` | the model names this server answers to | |
-| `GET /healthz` | liveness, loaded adapters, version | |
+| `GET /healthz` | liveness, loaded adapters, version, `max_state_tokens`, `max_batch` | |
+
+Every request object is checked for unknown keys: a misspelt key (`"evidnce"`, a question's `"question"` instead of `"instructions"`) is a 400 that names it, never silently dropped.
+
+A request can carry any number of questions and fields. The server answers them in passes of `--max_batch` (default 32) over the same cached state, so the cost grows linearly and a large request does not run out of memory.
 
 The routes differ in two ways only:
 - The Clairic routes read the first window of a state that is too long and set `truncated: true`. The others refuse with a 413 unless you send `options.allow_truncation: true`.
@@ -111,12 +116,33 @@ curl -s localhost:8420/v1/systemone -H 'content-type: application/json' -d '{
 }'
 ```
 
+A top-level `"evidence": "chosen"` (or the full object) is the same option, shorter. Sending both, differently, is a 400.
+
 - **`mode`:**
   - `chosen`: spans for the winning option only;
   - `all`: spans for every option;
   - `off`: no spans (the default).
 - **Each span:** `{start, end, text, weight, side: "state", role: "support" | "refute", option}`.
-- Evidence works on text states. JSON states are answered, but without spans.
+- Evidence works on text states. JSON states are answered, but without spans. To get spans over JSON, render it yourself (`json.dumps(x, sort_keys=True, separators=(",", ":"))`, the server's own rendering) and send the string.
+
+### Token counts and offsets
+
+Span offsets (`start`, `end`) are character offsets into the **rendered state**: a string is used as is, JSON is rendered with sorted keys and no spaces. `POST /v1/tokenize` shows that text and how the model reads it, before you ask anything:
+
+```bash
+curl -s localhost:8420/v1/tokenize -H 'content-type: application/json' -d '{"state": "Refunds within 30 days."}'
+# {"state_text": "Refunds within 30 days.", "state_tokens": 6, "limit": 2046, "truncated": false, "read_chars": 23,
+#  "offsets": [[0, 3], [3, 7], [7, 14], [14, 17], [17, 22], [22, 23]], "state_id": "sha256:7294ffb1…"}
+```
+
+- `state_tokens`: tokens in the whole rendered state, the same count as `usage.state_tokens` (which is capped at `limit`).
+- `limit`: tokens the model reads (`max_state_tokens` in `/healthz`). A longer state is a 413 unless truncation is allowed.
+- `read_chars`: characters of `state_text` inside the window: all of it, or where a truncated state is cut.
+- `offsets`: `[start, end)` per token (a token's span can include its leading space). Evidence spans are built from these tokens and then snapped to whole words.
+- `state_id`: the id `decide` reports for this state, so a client can tell which cached state an answer used.
+- An optional `model` is checked like `decide`'s (404 if not served); all served models share one tokenizer.
+
+From Python: `h.tokenize(state)` on either client.
 
 ## Step 4: extract fields (Clairic)
 
@@ -201,9 +227,10 @@ Errors are a 4xx with `{"detail": ...}`:
 
 | status | when |
 |---|---|
-| 400 | malformed request (unknown type, missing criteria, bad `reference_date`); a question id equal to a field name; images (Jev `assets`, Clairic `images`) or a `box` question; an `estimate` or `forecast` field |
+| 400 | malformed request (an unknown key, unknown type, missing criteria, bad `reference_date`); a question id equal to a field name; images (Jev `assets`, Clairic `images`) or a `box` question; an `estimate` or `forecast` field |
 | 404 | a model name this server doesn't serve (never silently substituted) |
 | 413 | the state is longer than the model's window and truncation wasn't allowed |
+| 503 | the GPU ran out of memory for this request; the server stays up. Retry, or send fewer questions per request (or start the server with a smaller `--max_batch`) |
 
 ## Differences from Jev and Clairic
 

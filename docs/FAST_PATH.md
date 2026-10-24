@@ -70,6 +70,21 @@ Horopter-1B, `--fast --precapture default`. Times are the client's wall time. Th
 | one adapter, 4 questions | 11.5 / 17 | 14 / 24 | 28 / 58 | 27 / 43 / 79 |
 | routed, 4 questions + evidence | 54 / 59 | 73 / 82 | 79 / 116 | 131 / 184 / 253 |
 
+**Many questions per request** (0.0.5; Horopter-1B beta-3, `--fast --slots 8 --precapture default`, a 727-token agent tool log, `horopter-nli`, yes/no questions; median server ms, cold = a new state; research repo `experiments/v3/e54_arecibo_serve/bench005.py`). The server answers in passes of `--max_batch` (default 32) questions over the cached state, so cost per question stays flat; 0.0.4 answered in one pass and ran out of memory with evidence from about 150 questions.
+
+| questions | evidence off, warm / cold | 0.0.4, warm / cold | evidence chosen, warm / cold | 0.0.4, warm / cold |
+|---|---|---|---|---|
+| 10 | 21 / 169 | 21–24 / 162–253 | 48 / 280 | 40 / 171–242 |
+| 50 | 109 / 508 | 124–147 / 483–628 | 284 / 1,208 | 315 / 327–1,257 |
+| 100 | | | 603 / 1,983 | 1,015 / 4,072 |
+| 150 | | | 899 / 2,231 | out of memory |
+| 200 | 519 / 1,271 | 1,001 / 3,921 | 1,208 / 1,706 | out of memory |
+| 400 | | | 2,392 / 2,684 | out of memory |
+
+- About 2.2–2.6 ms per question warm without evidence and 6 ms with it (evidence costs 2–3×).
+- Cold times vary 2–4× between runs: a new state, plus a graph capture for each pass shape not precaptured (the default shapes cover up to 4 questions per adapter). A deployment with a fixed request shape can precapture it: `FastPath.discover(requests)`.
+- GPU memory stayed at about 14.4 GB through 400 questions with evidence (22 GB at 100 in one pass on 0.0.4).
+
 ### Jetson Orin Nano 8 GB, in process
 
 - **Precision:** bf16, compiled and graphed.
