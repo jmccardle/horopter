@@ -154,6 +154,10 @@ How it works: each field becomes a hidden yes/no question ("Does the text give t
 - `p_null` is 1 − P(yes).
 - Then every candidate of the field's type in the text (numbers, dates, durations; for text fields, emails, phone numbers, URLs, IDs or names when the instructions name one, else the evidence spans themselves) is scored by the evidence for "yes". The best one wins.
 
+Known limits (beta):
+- **Free-text fields can come back cut short.** These are text fields with no type pattern, such as a file name or a version tag, where the value is the evidence span itself. The models tend to leave punctuation inside a value out of the span, so `quarterly.report.final.pdf` can come back as `quarterly.report.final`, or as `quarterly`. Sometimes no value comes back at all. Fields with a type pattern (email, phone, URL, IBAN, IDs, names, addresses, numbers, dates) aren't affected. This is a training limit, and it is on the roadmap.
+- **Pattern choice goes by keywords in the instructions.** "The file name of the attachment" picks up the person-name pattern because it contains "name". Word the instructions after the kind of value ("the attached document").
+
 ## Step 5: questions and fields together
 
 ```bash
