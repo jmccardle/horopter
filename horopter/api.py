@@ -96,8 +96,9 @@ class Options(_Closed):
 
 class Extensions(_Closed):
     """Horopter request options (also accepted under the key `mbnli`)."""
-    evidence: Optional[dict[str, Any]] = Field(None, description='{"mode": "off" | "chosen" | "all", "threshold": '
-                                                                 '0..1}: evidence spans per question answer.')
+    evidence: Optional[Union[Literal["off", "chosen", "all"], dict[str, Any]]] = Field(
+        None, description='{"mode": "off" | "chosen" | "all", "threshold": 0..1}, or just the mode: evidence spans per '
+                          'question answer.')
     allow_truncation: Optional[bool] = None
     debug: Optional[bool] = Field(None, description="Add routing and hidden-question details.")
 

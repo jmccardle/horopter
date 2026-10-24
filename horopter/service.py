@@ -199,6 +199,8 @@ class Service:
         ns = "mbnli" if model.startswith("mbnli") else "horopter"
         ext = req.horopter or req.mbnli
         opts = ext.model_dump(exclude_none=True) if ext else {}
+        if isinstance(opts.get("evidence"), str):
+            opts["evidence"] = {"mode": opts["evidence"]}
         if req.evidence is not None:               # top-level shorthand of horopter.evidence
             short = req.evidence if isinstance(req.evidence, dict) else {"mode": req.evidence}
             if "evidence" in opts and opts["evidence"] != short:

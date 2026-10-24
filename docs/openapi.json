@@ -790,6 +790,14 @@
      "evidence": {
       "anyOf": [
        {
+        "type": "string",
+        "enum": [
+         "off",
+         "chosen",
+         "all"
+        ]
+       },
+       {
         "additionalProperties": true,
         "type": "object"
        },
@@ -798,7 +806,7 @@
        }
       ],
       "title": "Evidence",
-      "description": "{\"mode\": \"off\" | \"chosen\" | \"all\", \"threshold\": 0..1}: evidence spans per question answer."
+      "description": "{\"mode\": \"off\" | \"chosen\" | \"all\", \"threshold\": 0..1}, or just the mode: evidence spans per question answer."
      },
      "allow_truncation": {
       "anyOf": [

@@ -74,6 +74,9 @@ def test_top_level_evidence_is_the_nested_option(svc):
     a = svc.decide({"state": STATE, "questions": Q, "evidence": "chosen"})
     b = svc.decide({"state": STATE, "questions": Q, "horopter": {"evidence": {"mode": "chosen"}}})
     assert a["answers"] == b["answers"] and "evidence" in a["answers"]["q"]["horopter"]
+    c = svc.decide({"state": STATE, "questions": Q, "horopter": {"evidence": "chosen"}})
+    assert c["answers"] == a["answers"]
+    assert svc.decide({"state": STATE, "questions": Q, "evidence": "chosen", "horopter": {"evidence": "chosen"}})
     e = _err(svc, {"state": STATE, "questions": Q, "evidence": "all", "horopter": {"evidence": {"mode": "chosen"}}})
     assert e.status == 400
 

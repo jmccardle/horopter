@@ -116,7 +116,7 @@ curl -s localhost:8420/v1/systemone -H 'content-type: application/json' -d '{
 }'
 ```
 
-A top-level `"evidence": "chosen"` (or the full object) is the same option, shorter. Sending both, differently, is a 400.
+`evidence` can also be just the mode (`"horopter": {"evidence": "chosen"}`), and a top-level `"evidence": "chosen"` (or the full object) is the same option, shorter. Sending both, differently, is a 400.
 
 - **`mode`:**
   - `chosen`: spans for the winning option only;
