@@ -43,18 +43,28 @@ adapter when one is loaded, else the routed family adapter).
 
     python -m horopter.server --model jmccardle/horopter-0.4B [--host 127.0.0.1] [--port 8420] [--device cpu] [--fast]
 
-Adapters and routing (docs/ADAPTERS.md). Without these flags: the model's bundled adapters, routed by its bundled
-router over the bundled family adapters.
-    --adapter [NAME=]SOURCE     load an adapter (a directory, "user/repo" or "user/repo:path/in/repo"); repeatable
-    --serve NAME                no routing: <prefix> answers with this adapter ("base" = the trunk alone)
-    --router NAME               route with this adapter ("base" = zero-shot routing with the trunk)
-    --route NAME [DESCRIPTION]  a routing target (the router's option) and its description; repeatable
+Adapters and routing (docs/ADAPTERS.md). Without these flags: the trunk alone (its own heads and abstention head),
+and no adapter is downloaded. Each flag below downloads only the adapters it names, on first use (then cached):
+    --adapters REF[,REF...]     load adapters; repeatable. REF: a bundled name (the model's adapters/NAME), a
+                                directory, "user/repo[@rev]" (adapter at the repo root) or "user/repo[@rev]:NAME"
+                                (adapters/NAME in a repo laid out like a model repo); "all" = every bundled adapter
+    --adapter [NAME=]REF        one adapter under a name of your choice; repeatable
+    --serve REF                 no routing: <prefix> answers with this adapter ("base" = the trunk alone, the default)
+    --router REF                route with this adapter ("base" = zero-shot routing with the trunk); without --route,
+                                over the targets its adapter.json lists (the bundled router: the bundled families)
+    --route REF [DESCRIPTION]   a routing target (the router's option) and its description; repeatable
 
+    # the bundled helpers: evidence spans and field extraction
+    python -m horopter.server --model jmccardle/horopter-0.4B --adapters evidence,extract
+    # the bundled router and the six family adapters it routes between (the worked example)
+    python -m horopter.server --model jmccardle/horopter-0.4B --router router
     # one adapter, no routing
-    python -m horopter.server --model jmccardle/horopter-0.4B --no_adapters --adapter refunds=./refunds --serve refunds
+    python -m horopter.server --model jmccardle/horopter-0.4B --serve ./refunds
+    # your router over your adapters, all from one hub repo
+    python -m horopter.server --model jmccardle/horopter-0.4B --router someone/horopter-0.4B-retail:router
     # zero-shot routing between two new adapters
-    python -m horopter.server --model jmccardle/horopter-0.4B --no_adapters --adapter ./refunds --adapter ./triage \
-        --router base --route refunds "a retail refund or return decision" --route triage "which team gets a ticket"
+    python -m horopter.server --model jmccardle/horopter-0.4B --router base \
+        --route ./refunds "a retail refund or return decision" --route ./triage "which team gets a ticket"
 """
 from __future__ import annotations
 
@@ -131,10 +141,11 @@ def main() -> int:
     ap.add_argument("--prefix", default="horopter", help="served model id prefix")
     ap.add_argument("--alias", default="mbnli-3-beta", help="comma list of extra prefixes serving the same models "
                                                             "('' = none)")
-    ap.add_argument("--adapters", default=None, help="extra adapter dir (<name>/adapter.safetensors), added to the "
-                                                     "model's own adapters/")
+    ap.add_argument("--adapters", action="append", default=[], metavar="REF[,REF...]",
+                    help="adapters to load: bundled names, directories (or a parent of <name>/ adapter dirs), "
+                         "'user/repo[@rev]' or 'user/repo[@rev]:NAME'; 'all' = every bundled adapter; repeatable")
     ap.add_argument("--abstain_head", default=None, help="abstention head JSON (default: the model's abstain_head.json)")
-    ap.add_argument("--no_adapters", action="store_true", help="do not load the model's own adapters/")
+    ap.add_argument("--no_adapters", action="store_true", help=argparse.SUPPRESS)   # no-op: loading no bundled adapters is the default
     ap.add_argument("--adapter", action="append", default=[], metavar="[NAME=]SOURCE",
                     help="load an adapter: a directory, 'user/repo' or 'user/repo:path/in/repo'; repeatable")
     ap.add_argument("--allow_trunk_mismatch", action="store_true",
@@ -167,25 +178,36 @@ def main() -> int:
     if a.device == "cpu":
         torch.set_num_threads(a.threads)
     t0 = time.perf_counter()
-    st = runtime.load(a.model, device=a.device, adapters=not a.no_adapters, max_state=a.max_state, quant=a.quant)
-    if a.adapters:
-        from pathlib import Path
-        for d in sorted(Path(a.adapters).glob("*/adapter.safetensors")):
-            if d.parent.name != "smoke":
-                st.add_adapter(d.parent.name, d.parent)
+    refs = [r.strip() for x in a.adapters for r in x.split(",") if r.strip()]
+    st = runtime.load(a.model, device=a.device, adapters="all" in refs, max_state=a.max_state, quant=a.quant)
+    check = not a.allow_trunk_mismatch
+    from pathlib import Path
+    for ref in refs:
+        if ref == "all":
+            continue
+        p = Path(ref)
+        if p.is_dir() and not (p / "adapter.safetensors").exists():   # a parent of <name>/ adapter dirs
+            subs = [d.parent for d in sorted(p.glob("*/adapter.safetensors")) if d.parent.name != "smoke"]
+            if not subs:
+                ap.error(f"--adapters {ref}: no adapter.safetensors in it or in its subdirectories")
+            for d in subs:
+                st.add_adapter_from(d, check_trunk=check)
+        else:
+            st.add_adapter_from(ref, check_trunk=check)
     for spec in a.adapter:
         name, eq, src = spec.partition("=")
         if not eq or "/" in name:                  # no NAME= (a path may contain "=")
             name, src = None, spec
-        st.add_adapter_from(src, name, check_trunk=not a.allow_trunk_mismatch)
+        st.add_adapter_from(src, name, check_trunk=check)
     from . import routing as RT
     if any(len(r) > 2 for r in a.route):
         ap.error("--route takes NAME and an optional DESCRIPTION (quote a description with spaces)")
     try:
-        rt = RT.configure(st, serve=a.serve, router=a.router, routes=[(r[0], r[1] if len(r) > 1 else None)
-                                                                      for r in a.route] or None,
-                          instructions=a.route_instructions, layout=a.route_layout)
-    except RT.RoutingError as e:
+        serve, router, routes = RT.prepare(st, a.serve, a.router, [(r[0], r[1] if len(r) > 1 else None)
+                                                                   for r in a.route] or None, check_trunk=check)
+        rt = RT.configure(st, serve=serve, router=router, routes=routes, instructions=a.route_instructions,
+                          layout=a.route_layout)
+    except (RT.RoutingError, FileNotFoundError, ValueError) as e:
         ap.error(str(e))
     if a.abstain_head:
         st.abstain_head = A.AbstainHead.from_json(a.abstain_head)

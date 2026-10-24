@@ -59,6 +59,10 @@ def main():
     ap.add_argument("--dev_n", type=int, default=300)
     ap.add_argument("--max_state", type=int, default=512, help="state window in tokens while training this adapter")
     ap.add_argument("--seed", type=int, default=13)
+    ap.add_argument("--description", default=None, help="adapter.json description: what its questions are about "
+                                                         "(a router routes by it)")
+    ap.add_argument("--meta", default=None, help="a JSON file merged into adapter.json (build_router_data.py writes "
+                                                  "one: routing_layout and targets)")
     a = ap.parse_args()
     torch.manual_seed(a.seed)
     torch.backends.cuda.matmul.allow_tf32 = True
@@ -122,6 +126,10 @@ def main():
             "data": Path(a.data).name, "train_rows": len(train), "steps": steps, "lr": a.lr, "head_lr": a.head_lr,
             "max_state": a.max_state, "train_sec": train_sec, "dev_acc_p": p_acc, "dev_acc": a_acc,
             "peak_mem_gb": round(peak_gb(), 1), "adapter_mb": round(sum(v.numel() for v in sd.values()) * 4 / 2**20, 1)}
+    if a.description:
+        meta["description"] = a.description
+    if a.meta:
+        meta.update(json.load(open(a.meta)))
     json.dump(meta, open(out_dir / "adapter.json", "w"), indent=1)
     json.dump(dict(meta, curve=curve), open(out_dir / "train_log.json", "w"), indent=1)
     print(f"[{a.name}] done {train_sec}s; dev acc trunk {p_acc} -> adapter {a_acc}", flush=True)

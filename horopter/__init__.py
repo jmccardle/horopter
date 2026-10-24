@@ -21,16 +21,21 @@ def connect(url="http://127.0.0.1:8420", model=None, **kw):
     return Client(url, model=model, **kw)
 
 
-def local(path_or_hub_id="jmccardle/horopter-0.4B", device=None, fast=False, model=None, adapters_from=None,
-          serve=None, router=None, routes=None, route_instructions=None, route_layout=None, **load_kw):
+def local(path_or_hub_id="jmccardle/horopter-0.4B", device=None, fast=False, model=None, adapters=None,
+          adapters_from=None, serve=None, router=None, routes=None, route_instructions=None, route_layout=None,
+          **load_kw):
     """Load a model in this process and serve it through the same interface as connect(). -> horopter.Local
-    adapters_from: {name: source} (or a list of sources) loaded next to the model's own adapters (adapters=False
-    skips those). serve / router / routes / route_*: horopter.routing.configure (routes: [(name, description)])."""
-    st = load(path_or_hub_id, device=device, **load_kw)
+    Like the server: the trunk alone unless adapters are named, and only named adapters are downloaded.
+    adapters: references to load (bundled names, directories, "user/repo[@rev][:NAME]"; True = every bundled one).
+    adapters_from: {name: reference} to load under names of your choice (or a list of references).
+    serve / router / routes / route_*: horopter.routing (routes: [(reference, description)]); whatever they name is
+    loaded too, and a router without routes routes over the targets its adapter.json lists."""
+    st = load(path_or_hub_id, device=device, adapters=adapters if adapters is not None else False, **load_kw)
     srcs = adapters_from.items() if isinstance(adapters_from, dict) else [(None, s) for s in adapters_from or ()]
     for name, src in srcs:
         st.add_adapter_from(src, name)
     from . import routing as _routing
+    serve, router, routes = _routing.prepare(st, serve, router, routes)
     rt = _routing.configure(st, serve=serve, router=router, routes=routes, instructions=route_instructions,
                             layout=route_layout)
     fp = None

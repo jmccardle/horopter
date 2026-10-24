@@ -64,7 +64,7 @@ r = h.decide("Refunds within 30 days. The lamp was bought 12 days ago.",
 r["answers"]["refund"]["noul"], r["answers"]["days"]["value"]
 ```
 
-Server: `python -m horopter.server --model jmccardle/horopter-0.4B --port 8420 --fast` (add `--device cpu` on a machine without a GPU). It speaks Jev's System One format (`/v1/systemone`: typed questions) and Cloudflare's Clairic format (`/v1/clairic`: typed field extraction), with both in one request at `/v1/horopter`. Walkthrough: [docs/API.md](docs/API.md); spec: [docs/openapi.json](docs/openapi.json).
+Server: `python -m horopter.server --model jmccardle/horopter-0.4B --port 8420 --fast` (add `--device cpu` on a machine without a GPU). That serves the trunk alone. Add adapters by name, `--adapters evidence,extract`, or route between your own (`--router`); only the adapters named are downloaded. The bundled router and its six family adapters (`--router router`) are a worked example. Train adapters and a router for your own tasks: [docs/ADAPTERS.md](docs/ADAPTERS.md). It speaks Jev's System One format (`/v1/systemone`: typed questions) and Cloudflare's Clairic format (`/v1/clairic`: typed field extraction), with both in one request at `/v1/horopter`. Walkthrough: [docs/API.md](docs/API.md); spec: [docs/openapi.json](docs/openapi.json).
 
 `--fast` serves the same answers (up to bf16 rounding) 3–19× faster on a GPU, and caches states on a CPU: a state asked
 about again costs only its question tokens. Measurements, settings and memory are in [docs/FAST_PATH.md](docs/FAST_PATH.md).

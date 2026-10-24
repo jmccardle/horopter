@@ -33,10 +33,10 @@ def fake_st(names):
 
 def test_defaults():
     st = fake_st(["router", "evidence", *F.FAMILIES])
-    rt = RT.configure(st)
+    assert RT.configure(st).serve == "base"                                # no flags: the trunk alone, even if loaded
+    rt = RT.configure(st, router="router")                                 # the bundled router: the bundled families
     assert rt.router == "router" and rt.layout == "state" and list(rt.targets) == list(F.FAMILIES)
-    assert RT.configure(fake_st(["nli"])).serve == "base"                  # no router: base answers directly
-    rt = RT.configure(fake_st(["router", "nli", "typed"]))                 # only loaded families are options
+    rt = RT.configure(fake_st(["router", "nli", "typed"]), router="router")   # only loaded families are options
     assert list(rt.targets) == ["typed", "nli"]
 
 
@@ -100,7 +100,9 @@ REQ = {"state": "The refund policy allows returns within 30 days with a receipt.
 
 def test_served_routing(model):
     from horopter.service import Service
-    svc = Service(model)                                    # bundled router, state layout
+    out = Service(model).decide(dict(REQ, model="horopter"))   # no routing given: the trunk alone
+    assert all(a["horopter"]["route"]["adapter"] == "base" for a in out["answers"].values())
+    svc = Service(model, routing=RT.configure(model, router="router"))   # bundled router, state layout
     out = svc.decide(dict(REQ, model="horopter"))
     assert all(a["horopter"]["route"]["adapter"] in F.FAMILIES for a in out["answers"].values())
     svc = Service(model, routing=RT.configure(model, serve="nli"))
@@ -115,6 +117,19 @@ def test_served_routing(model):
         assert r["adapter"] in ("typed", "classification") and set(r["router"]) == {"typed", "classification"}
     assert "router base (question layout) over typed, classification" in str(svc.models())
     assert svc.health()["routing"]["router"] == "base"
+
+
+def test_loads_only_named_adapters():
+    if not MODEL:
+        pytest.skip("set HOROPTER_TEST_MODEL to a model directory with its bundled adapters")
+    from horopter import runtime
+    st = runtime.load(MODEL, device="cpu", adapters=False)
+    assert set(st.bank) == {"base"}
+    st = runtime.load(MODEL, device="cpu", adapters=["evidence"])
+    assert set(st.bank) == {"base", "evidence"}
+    serve, router, routes = RT.prepare(st, router="router")       # the bundled router brings its six families
+    assert set(st.bank) == {"base", "evidence", "router", *F.FAMILIES}
+    assert RT.configure(st, serve=serve, router=router, routes=routes).targets.keys() == F.FAMILIES.keys()
 
 
 def test_trunk_check(model, tmp_path):

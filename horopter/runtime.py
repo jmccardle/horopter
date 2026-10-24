@@ -14,7 +14,7 @@ HF layout (a directory):
     config.json                 base model id + base transformers config, dims, max_state, heads, arm, LoRA rank
     model.safetensors           trunk + heads (keys as in training; "answer.*" = the answer head)
     tokenizer files             the base model's tokenizer (optional; else downloaded by base model id)
-    adapters/<name>/adapter.safetensors + adapter.json
+    adapters/<name>/adapter.safetensors + adapter.json    downloaded only when asked for by name (load(adapters=[...]))
     abstain_head.json           the logistic abstention head (optional)
     quantized/model-<scheme>.safetensors   optional Q8 / Q4 trunks (horopter.quant), loaded with load(..., quant=scheme)
 """
@@ -79,6 +79,8 @@ class Student:
         self.loaded = "base"
         self.bank = {"base": self.base_state}
         self.meta = {"base": {"name": "base", "kind": "trunk P, no adapter", "p": run}}
+        self.source = None       # where the model came from: a local Path or a Ref (hub repo), for adapters by name
+        self.sources = {}        # adapter name -> the Ref or Path it was loaded from
         self.abstain_head = None
 
     @property
@@ -127,18 +129,25 @@ class Student:
         self.meta[name] = json.load(open(meta)) if meta.exists() else {"name": name}
 
     def add_adapter_from(self, source, name=None, check_trunk=True):
-        """Load an adapter from a directory or a hub reference ("user/repo" or "user/repo:path/in/repo") into the bank
-        under name (default: adapter.json "name", else the directory name). check_trunk: refuse an adapter trained on
-        another trunk (adapter.json "p" != this model's run); an adapter only fits the exact trunk it was trained on.
-        -> the name."""
-        path = adapter_path(source)
+        """Load an adapter into the bank (see adapter_path for the references: a bundled name, a directory, or a hub
+        repo) under name (default: adapter.json "name", else the directory name). check_trunk: refuse an adapter
+        trained on another trunk (adapter.json "p" != this model's run); an adapter only fits the exact trunk it was
+        trained on. -> the name."""
+        path, origin = adapter_path(source, self.source, with_origin=True)
         meta = json.load(open(path / "adapter.json")) if (path / "adapter.json").exists() else {}
         name = name or meta.get("name") or path.name
         if check_trunk and self.run and meta.get("p") and meta["p"] != self.run:
             raise ValueError(f"adapter {name!r} ({source}) was trained on trunk {meta['p']!r}; this model is "
                              f"{self.run!r}. An adapter only fits the trunk it was trained on")
         self.add_adapter(name, path)
+        self.sources[name] = origin
         return name
+
+    def ensure(self, ref, check_trunk=True):
+        """An adapter name or reference -> its bank name, loading it first if it isn't loaded."""
+        if ref in self.bank:
+            return ref
+        return self.add_adapter_from(ref, check_trunk=check_trunk)
 
     def use(self, name):
         if self.loaded != name:
@@ -265,28 +274,92 @@ def base_config_of(cfg):
     return AutoConfig.for_model(bc.pop("model_type"), **bc)
 
 
-def adapter_path(source):
-    """A local adapter directory (adapter.safetensors + adapter.json) for a directory or a hub reference
-    "user/repo" (adapter at the repo root) or "user/repo:sub/dir" (huggingface_hub needed for the hub)."""
+class Ref:
+    """A hub reference "user/repo[@revision][:name]". name: an adapter in the repo (adapters/<name>/, else the path
+    <name>/); none: the adapter at the repo root."""
+
+    def __init__(self, repo, revision=None, sub=""):
+        self.repo, self.revision, self.sub = repo, revision, sub.strip("/")
+
+    @classmethod
+    def parse(cls, s):
+        repo, _, sub = str(s).partition(":")
+        repo, _, rev = repo.partition("@")
+        return cls(repo, rev or None, sub)
+
+    def __str__(self):
+        return self.repo + (f"@{self.revision}" if self.revision else "") + (f":{self.sub}" if self.sub else "")
+
+    def child(self, name):
+        """An adapter in the same repo and revision."""
+        return Ref(self.repo, self.revision, name)
+
+
+def _download(ref, patterns):
+    from huggingface_hub import snapshot_download   # optional dependency
+    return Path(snapshot_download(ref.repo, revision=ref.revision, allow_patterns=patterns))
+
+
+def adapter_path(source, model=None, with_origin=False):
+    """A local adapter directory (adapter.safetensors + adapter.json) for one reference:
+        NAME                      one of the model's own adapters, adapters/NAME (fetched from the model's hub repo
+                                  on first use; model = Student.source)
+        ./dir, /abs/dir           a directory
+        user/repo[@rev]           the adapter at a hub repo's root
+        user/repo[@rev]:NAME      adapters/NAME in a hub repo laid out like a model repo (else the path NAME/)
+    Only the files of that one adapter are downloaded. with_origin: -> (path, the Path or Ref it came from)."""
+    out = lambda p, o: (p, o) if with_origin else p
+    if isinstance(source, Ref):
+        return _from_hub(source, out)
     path = Path(source)
     if (path / "adapter.safetensors").exists():
-        return path
+        return out(path, path)
     if path.exists():
         raise FileNotFoundError(f"{source}: no adapter.safetensors in this directory")
-    from huggingface_hub import snapshot_download   # optional dependency
-    repo, _, sub = str(source).partition(":")
-    sub = sub.strip("/")
-    root = Path(snapshot_download(repo, allow_patterns=[f"{sub}/*" if sub else "adapter.*"]))
-    path = root / sub if sub else root
-    if not (path / "adapter.safetensors").exists():
-        raise FileNotFoundError(f"{source}: no adapter.safetensors at {sub or 'the repo root'}")
-    return path
+    s = str(source)
+    if "/" not in s.partition(":")[0]:               # a bare name: the model's own adapters/NAME
+        if model is None:
+            raise FileNotFoundError(f"{source}: not a directory, and no model to take a bundled adapter from")
+        if isinstance(model, Path):
+            p = model / "adapters" / s
+            if not (p / "adapter.safetensors").exists():
+                have = sorted(d.parent.name for d in (model / "adapters").glob("*/adapter.safetensors"))
+                raise FileNotFoundError(f"{source}: the model has no adapters/{s} (it has: {', '.join(have) or 'none'})")
+            return out(p, p)
+        return adapter_path(model.child(s), with_origin=with_origin)
+    return _from_hub(Ref.parse(s), out)
 
 
-def load(path_or_hub_dir,device=None, adapters=True, abstain_head=True, max_state=None, pretrained_init=False,
+def _from_hub(ref, out):
+    if not ref.sub:
+        p = _download(ref, ["adapter.*"])
+        if not (p / "adapter.safetensors").exists():
+            raise FileNotFoundError(f"{ref}: no adapter.safetensors at the repo root (name one: {ref.repo}:NAME)")
+        return out(p, ref)
+    root = _download(ref, [f"adapters/{ref.sub}/*", f"{ref.sub}/*"])
+    for p in (root / "adapters" / ref.sub, root / ref.sub):
+        if (p / "adapter.safetensors").exists():
+            return out(p, ref)
+    raise FileNotFoundError(f"{ref}: no adapter at adapters/{ref.sub}/ or {ref.sub}/")
+
+
+def adapter_names(model):
+    """The adapters a model offers: names under adapters/ (a local Path or a hub Ref; the hub lists files, no
+    download)."""
+    if isinstance(model, Path):
+        return sorted(d.parent.name for d in (model / "adapters").glob("*/adapter.safetensors"))
+    from huggingface_hub import list_repo_files
+    return sorted({f.split("/")[1] for f in list_repo_files(model.repo, revision=model.revision)
+                   if f.startswith("adapters/") and f.endswith("/adapter.safetensors")})
+
+
+def load(path_or_hub_dir, device=None, adapters=True, abstain_head=True, max_state=None, pretrained_init=False,
          quant=None):
-    """Load the HF layout (a local directory, or a hub repo id if huggingface_hub is installed) -> Student, with every
-    adapter under adapters/ in .bank and the abstention head (if any) in .abstain_head.
+    """Load the HF layout (a local directory, or a hub repo id "user/repo[@revision]" if huggingface_hub is
+    installed) -> Student, with the abstention head (if any) in .abstain_head.
+    adapters: True = every adapter under adapters/ into .bank; False / None = none; a list = those references
+    (bundled names or any adapter_path reference). From the hub only the listed adapters are downloaded, and none with
+    False; later Student.ensure(name) fetches more on first use.
     pretrained_init: construct the encoder from the base model's pretrained weights before loading (see build_trunk;
     training only, needs the base weights).
     quant: "w8" | "w4g32" | "w4g128" loads quantized/model-<quant>.safetensors instead of model.safetensors (a hub
@@ -297,10 +370,13 @@ def load(path_or_hub_dir,device=None, adapters=True, abstain_head=True, max_stat
     from . import quant as Q
     wfile = Q.file_of(quant) if quant else "model.safetensors"
     path = Path(path_or_hub_dir)
+    source = path
     if not path.exists():
         from huggingface_hub import snapshot_download   # optional dependency
+        source = Ref.parse(path_or_hub_dir)
         other = [Q.file_of(s) for s in Q.SCHEMES if s != quant] + (["model.safetensors"] if quant else [])
-        path = Path(snapshot_download(str(path_or_hub_dir), ignore_patterns=other))
+        other += [] if adapters is True else ["adapters/*"]
+        path = Path(snapshot_download(source.repo, revision=source.revision, ignore_patterns=other))
     cfg = read_config(path)
     sd = load_file(str(path / wfile))
     if quant:
@@ -314,11 +390,17 @@ def load(path_or_hub_dir,device=None, adapters=True, abstain_head=True, max_stat
     st = Student(model, ans, AutoTokenizer.from_pretrained(str(tok_src)), max_state=max_state or cfg["max_state"],
                  max_q=cfg.get("max_q", 128), r=cfg["lora"]["r"], device=device, name=cfg.get("name", path.name),
                  run=cfg.get("run", ""), config=cfg)
+    st.source = source if isinstance(source, Ref) else path
     st.quant = quant or ""
-    if adapters and (path / "adapters").is_dir():
-        for d in sorted((path / "adapters").glob("*/adapter.safetensors")):
-            if d.parent.name != "smoke":
-                st.add_adapter(d.parent.name, d.parent)
+    if adapters is True:
+        if (path / "adapters").is_dir():
+            for d in sorted((path / "adapters").glob("*/adapter.safetensors")):
+                if d.parent.name != "smoke":
+                    st.add_adapter(d.parent.name, d.parent)
+                    st.sources[d.parent.name] = d.parent if isinstance(source, Path) else source.child(d.parent.name)
+    elif adapters:
+        for ref in adapters:
+            st.ensure(ref)
     if abstain_head and cfg.get("abstain_head") and (path / cfg["abstain_head"]).exists():
         st.abstain_head = A.AbstainHead.from_json(path / cfg["abstain_head"])
     return st

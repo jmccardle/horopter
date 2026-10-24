@@ -15,6 +15,11 @@ Layouts (what the router reads):
     from horopter import routing
     rt = routing.configure(st, router="base", routes=[("refunds", "a retail refund decision"), ("triage", None)])
     rt = routing.configure(st, serve="nli")          # no routing: every question goes to the nli adapter
+
+prepare() loads what a configuration names but isn't loaded yet (bundled names fetched from the model's repo, or any
+runtime.adapter_path reference), so a server or local() downloads only the adapters it uses. A router's adapter.json
+may list the targets it was trained for, "targets": {name: description} (names in the router's own repo); the
+bundled router's are the bundled families.
 """
 import json
 
@@ -83,24 +88,50 @@ class Routing:
                 "targets": dict(self.targets)}
 
 
+def router_targets(st, router):
+    """The targets a router names for itself: adapter.json "targets" ({name: description} or [names]), else the
+    bundled families for the bundled router, else none. -> [(reference, description or None)]: references in the
+    router's own repo (or the model's)."""
+    t = (st.meta.get(router) or {}).get("targets")
+    if t is None:
+        return [(f, None) for f in F.FAMILIES] if router == "router" else []
+    items = list(t.items()) if isinstance(t, dict) else [(n, None) for n in t]
+    origin = getattr(st, "sources", {}).get(router)
+    if origin is not None and hasattr(origin, "child"):          # a hub Ref: targets live in the same repo
+        return [(str(origin.child(n)), d) for n, d in items]
+    if origin is not None and getattr(origin, "parent", None) is not None and (origin.parent / items[0][0]).exists():
+        return [(str(origin.parent / n), d) for n, d in items]   # a local adapters/ dir: siblings
+    return items
+
+
+def prepare(st, serve=None, router=None, routes=None, check_trunk=True):
+    """Load every adapter the configuration names that isn't loaded yet (Student.ensure: bundled names come from the
+    model's repo, references from anywhere). With a router and no routes, its own targets (router_targets).
+    -> (serve, router, routes) with bank names, ready for configure()."""
+    serve = st.ensure(serve, check_trunk) if serve not in (None, "base") else serve
+    router = st.ensure(router, check_trunk) if router not in (None, "base") else router
+    if router is not None and not routes:
+        routes = router_targets(st, router) or None
+    if routes:
+        routes = [(st.ensure(ref, check_trunk), desc) for ref, desc in routes]
+    return serve, router, routes
+
+
 def configure(st, serve=None, router=None, routes=None, instructions=None, layout=None):
     """A Routing for the adapters loaded in st.bank.
     serve: one adapter name (or "base"): no routing.
-    router: an adapter name (or "base"); routes: [(name, description or None)] targets (default: the bundled families
-    that are loaded). layout default: the router's adapter.json "routing_layout", else "state" for the bundled router
-    (its training layout), else "question".
-    With neither serve nor router: the bundled router over the bundled families if a "router" adapter is loaded,
-    else base served directly."""
+    router: an adapter name (or "base"); routes: [(name, description or None)] targets (default: the router's own
+    targets that are loaded, router_targets; else the bundled families that are loaded). layout default: the router's
+    adapter.json "routing_layout", else "state" for the bundled router (its training layout), else "question".
+    With neither serve nor router: base served directly (the trunk alone). Names must be loaded: prepare() loads
+    them."""
     bank = st.bank
     if serve is not None and (router is not None or routes):
         raise RoutingError("serve answers with one adapter; it cannot be combined with router or routes")
     if serve is None and router is None:
-        if "router" not in bank:
-            if routes:
-                raise RoutingError("routes need a router: pass router (any loaded adapter, or base)")
-            serve = "base"
-        else:
-            router = "router"
+        if routes:
+            raise RoutingError("routes need a router: pass router (any loaded adapter, or base)")
+        serve = "base"
     for name in [serve, router] + [r[0] for r in routes or []]:
         if name is not None and name not in bank:
             raise RoutingError(f"adapter {name!r} is not loaded; loaded: {sorted(bank)}")
@@ -113,7 +144,8 @@ def configure(st, serve=None, router=None, routes=None, instructions=None, layou
                 raise RoutingError(f"route {name!r} given twice")
             targets[name] = desc or describe(st, name)
     else:
-        targets = {f: describe(st, f) for f in F.FAMILIES if f in bank}
+        own = [ref.rpartition(":")[2].rstrip("/").rpartition("/")[2] for ref, _ in router_targets(st, router)]
+        targets = {f: describe(st, f) for f in (own or F.FAMILIES) if f in bank}
     if layout is None:   # an adapter.json may say which layout its router was trained on
         layout = (st.meta.get(router) or {}).get("routing_layout") or ("state" if router == "router" else "question")
     return Routing(router=router, targets=targets, instructions=instructions or ASK, layout=layout)
