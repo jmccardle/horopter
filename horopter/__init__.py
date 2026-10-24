@@ -9,7 +9,7 @@ evidence spans and abstention per question).
 """
 from .client import Client, HoropterError, Local  # noqa: F401
 
-__version__ = "0.0.4"
+__version__ = "0.0.5"
 
 _TORCH = ("abstain", "evidence", "families", "fields", "losses", "model", "packing", "runtime", "quant", "fast",
           "service", "server", "api", "routing")
@@ -23,13 +23,14 @@ def connect(url="http://127.0.0.1:8420", model=None, **kw):
 
 def local(path_or_hub_id="jmccardle/horopter-0.4B", device=None, fast=False, model=None, adapters=None,
           adapters_from=None, serve=None, router=None, routes=None, route_instructions=None, route_layout=None,
-          **load_kw):
+          max_batch=32, **load_kw):
     """Load a model in this process and serve it through the same interface as connect(). -> horopter.Local
     Like the server: the trunk alone unless adapters are named, and only named adapters are downloaded.
     adapters: references to load (bundled names, directories, "user/repo[@rev][:NAME]"; True = every bundled one).
     adapters_from: {name: reference} to load under names of your choice (or a list of references).
     serve / router / routes / route_*: horopter.routing (routes: [(reference, description)]); whatever they name is
-    loaded too, and a router without routes routes over the targets its adapter.json lists."""
+    loaded too, and a router without routes routes over the targets its adapter.json lists.
+    max_batch: questions per model pass (the server's --max_batch)."""
     st = load(path_or_hub_id, device=device, adapters=adapters if adapters is not None else False, **load_kw)
     srcs = adapters_from.items() if isinstance(adapters_from, dict) else [(None, s) for s in adapters_from or ()]
     for name, src in srcs:
@@ -43,7 +44,7 @@ def local(path_or_hub_id="jmccardle/horopter-0.4B", device=None, fast=False, mod
         from . import fast as _fast
         fp = _fast.FastPath(st)
     from .service import Service
-    return Local(Service(st, fast=fp, routing=rt), model=model)
+    return Local(Service(st, fast=fp, routing=rt, max_batch=max_batch), model=model)
 
 
 def load(*args, **kw):

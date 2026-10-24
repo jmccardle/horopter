@@ -60,6 +60,8 @@ def test_decide_body_and_routes(url):
     assert h.decide("s", fields={"f": {"type": "text"}}, route="clairic")["path"] == "/v1/clairic"
     assert h.decide("s", questions={"q": {"type": "noul"}}, route="systemone")["path"] == "/v1/systemone"
     assert h.models() == [{"name": "horopter"}] and h.health() == {"ok": True}
+    r = h.tokenize({"a": 1})
+    assert r["path"] == "/v1/tokenize" and r["body"] == {"state": {"a": 1}, "model": "horopter-typed"}
 
 
 def test_errors(url):

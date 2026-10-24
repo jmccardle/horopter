@@ -6,6 +6,8 @@
     POST /ai/run/@cf/cloudflare/clairic, /client/v4/accounts/{account}/ai/run/@cf/cloudflare/clairic
                          Workers AI REST paths: the same answer wrapped as {"result", "success", "errors", "messages"}
     POST /v1/horopter    our own name for the same handler (questions and fields together)
+    POST /v1/tokenize    {"state"} -> the rendered state, its token count, the model's limit and each token's character
+                         offsets (the offsets evidence and field spans use)
     GET  /v1/models, /healthz, /openapi.json, /docs
 
 Every route takes the same request (horopter.api.DecideRequest: questions, fields, or both) and returns the same body,
@@ -71,16 +73,17 @@ from __future__ import annotations
 import argparse
 import time
 
-from .api import DecideRequest, DecideResponse, WorkersAIResponse
+from .api import DecideRequest, DecideResponse, TokenizeRequest, TokenizeResponse, WorkersAIResponse
 from .service import (CLAIRIC_NAMES, CONTRACT, NO_IMAGES, Service, ServiceError, check_question,  # noqa: F401
                       normalise, render_state, typed_answer)
 
 
 def build_app(st, prefix: str = "horopter", aliases=("mbnli-3-beta",), release_date: str = "", fast=None,
-              routing=None):
+              routing=None, max_batch=32):
     """st: a horopter.runtime.Student with its adapter bank (horopter.runtime.load). -> FastAPI app.
     fast: a horopter.fast.FastPath on st (same answers up to bf16 kernel rounding; docs/FAST_PATH.md).
-    routing: a horopter.routing.Routing (default: the bundled router, if loaded)."""
+    routing: a horopter.routing.Routing (default: the bundled router, if loaded).
+    max_batch: questions per model pass (horopter.service.Service)."""
     from fastapi import FastAPI, HTTPException, Request
     from fastapi.encoders import jsonable_encoder
     from fastapi.exceptions import RequestValidationError
@@ -88,7 +91,7 @@ def build_app(st, prefix: str = "horopter", aliases=("mbnli-3-beta",), release_d
 
     from . import __version__
 
-    svc = Service(st, prefix, aliases, release_date, fast, routing)
+    svc = Service(st, prefix, aliases, release_date, fast, routing, max_batch)
     app = FastAPI(title="Horopter", version=__version__,
                   description="Typed decisions (Jev System One questions) and typed extraction (Clairic fields) over "
                               "one cached state, with relation, abstention and evidence spans.")
@@ -119,6 +122,14 @@ def build_app(st, prefix: str = "horopter", aliases=("mbnli-3-beta",), release_d
     @app.post("/v1/clairic", responses=ok, summary="Clairic route (fields; questions accepted too)")
     def clairic_route(req: DecideRequest):
         return decide(req, clairic=True)
+
+    @app.post("/v1/tokenize", responses={200: {"model": TokenizeResponse}},
+              summary="The state as the model reads it: token count, limit, character offsets per token")
+    def tokenize(req: TokenizeRequest):
+        try:
+            return svc.tokenize(req)
+        except ServiceError as e:
+            raise HTTPException(e.status, e.detail) from None
 
     def workers(req: DecideRequest):
         return {"result": decide(req, clairic=True), "success": True, "errors": [], "messages": []}
@@ -166,6 +177,8 @@ def main() -> int:
     ap.add_argument("--fast", action="store_true", help="horopter.fast: state cache + CUDA graphs + Flex + one pass for "
                                                          "all adapters (cuda; bf16 weights); state cache only on cpu")
     ap.add_argument("--slots", type=int, default=3, help="--fast: states kept in the cache")
+    ap.add_argument("--max_batch", type=int, default=32, help="questions per model pass: larger requests are answered "
+                                                              "in several passes over the cached state (0 = one pass)")
     ap.add_argument("--precapture", default="none", choices=["none", "default"],
                     help="--fast on cuda: capture the default graph shapes at start-up (first requests then pay no "
                          "capture; costs start-up time and GPU memory)")
@@ -224,7 +237,8 @@ def main() -> int:
         fp = fast.FastPath(st, slots=a.slots, precapture=pre)
         print(f"fast path {fp.cfg} ready in {time.perf_counter() - t0:.1f}s ({fp.captured} graphs precaptured)",
               flush=True)
-    uvicorn.run(build_app(st, a.prefix, [x for x in a.alias.split(",") if x], fast=fp, routing=rt), host=a.host,
+    uvicorn.run(build_app(st, a.prefix, [x for x in a.alias.split(",") if x], fast=fp, routing=rt,
+                          max_batch=a.max_batch), host=a.host,
                 port=a.port, log_level="warning")
     return 0
 

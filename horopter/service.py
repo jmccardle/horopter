@@ -9,7 +9,7 @@ import json
 import threading
 import time
 
-from .api import DecideRequest
+from .api import DecideRequest, TokenizeRequest
 
 CONTRACT = "3.1.0+contract2"
 CLAIRIC_NAMES = ("clairic", "@cf/cloudflare/clairic")
@@ -71,8 +71,23 @@ def typed_answer(q, p):
 
 
 
+def _valid(model, req):
+    from pydantic import ValidationError
+    if isinstance(req, model):
+        return req
+    try:
+        return model.model_validate(req)
+    except ValidationError as e:
+        raise ServiceError(400, json.loads(e.json(include_url=False))) from None
+
+
+def _chunks(keys, n):
+    keys = list(keys)
+    return [keys[i:i + n] for i in range(0, len(keys), n)] if n else [keys]
+
+
 class ServiceError(Exception):
-    """An HTTP-style error: status (400 / 404 / 413) and detail."""
+    """An HTTP-style error: status (400 / 404 / 413 / 503) and detail."""
     def __init__(self, status, detail):
         super().__init__(f"{status}: {detail}")
         self.status, self.detail = status, detail
@@ -81,10 +96,13 @@ class ServiceError(Exception):
 class Service:
     """st: a horopter.runtime.Student with its adapter bank; fast: an optional horopter.fast.FastPath on st;
     routing: a horopter.routing.Routing (default: routing.configure(st), the bundled router if one is loaded).
+    max_batch: questions (and fields) per model pass; a larger request is answered in several passes over the same
+    cached state, so any number of questions fits in memory (0 = one pass, the 0.0.4 behaviour).
     The prefix name (e.g. "horopter") is the routed model, or the served adapter when routing serves one directly;
     prefix-<adapter> answers with that adapter."""
 
-    def __init__(self, st, prefix="horopter", aliases=("mbnli-3-beta",), release_date="", fast=None, routing=None):
+    def __init__(self, st, prefix="horopter", aliases=("mbnli-3-beta",), release_date="", fast=None, routing=None,
+                 max_batch=32):
         from . import families as F
         from . import fields as FL
         from . import routing as RT
@@ -92,7 +110,7 @@ class Service:
         from .packing import options
         from .runtime import answer_routed
         self._mods = (F, FL, SUP, REF, options, answer_routed)
-        self.st, self.fast, self.lock = st, fast, threading.Lock()
+        self.st, self.fast, self.lock, self.max_batch = st, fast, threading.Lock(), max_batch
         bank = st.bank
         self.routing = routing or RT.configure(st)
         self.has_router = self.routing.routed
@@ -115,7 +133,21 @@ class Service:
         st, fast = self.st, self.fast
         return {"ok": True, "trunk": st.name, "p": st.run, "adapters": sorted(st.bank), "router": self.has_router,
                 "routing": self.routing.info(), "device": str(st.device), "fast": dict(fast.cfg) if fast else None,
-                "version": __version__}
+                "max_state_tokens": st.col.ms - 2, "max_batch": self.max_batch, "version": __version__}
+
+    def tokenize(self, req):
+        """The state as decide() reads it: rendered text, token count, the model's limit and each token's character
+        offsets, so a client can check length and map span offsets before asking anything."""
+        req = _valid(TokenizeRequest, req)
+        if req.model is not None and req.model not in self.served and req.model not in CLAIRIC_NAMES:
+            raise ServiceError(404, f"this server does not serve {req.model!r}; it serves {sorted(self.served)}")
+        st = self.st
+        state = render_state(req.state)
+        offs = [list(o) for o in st.tok(state, add_special_tokens=False, return_offsets_mapping=True)["offset_mapping"]]
+        limit = st.col.ms - 2
+        return {"state_text": state, "state_tokens": len(offs), "limit": limit, "truncated": len(offs) > limit,
+                "read_chars": offs[limit - 1][1] if len(offs) > limit else len(state), "offsets": offs,
+                "state_id": "sha256:" + hashlib.sha256(state.encode()).hexdigest()}
 
     def models(self):
         out, meta, rt = [], self.st.meta, self.routing
@@ -129,12 +161,7 @@ class Service:
     def decide(self, req, clairic=False):
         """req: a request dict (or horopter.api.DecideRequest) -> the response dict every route returns.
         clairic: Clairic route semantics (truncate long states and say so; the state must be non-empty)."""
-        from pydantic import ValidationError
-        if not isinstance(req, DecideRequest):
-            try:
-                req = DecideRequest.model_validate(req)
-            except ValidationError as e:
-                raise ServiceError(400, json.loads(e.json(include_url=False))) from None
+        req = _valid(DecideRequest, req)
         st, served, fast, version = self.st, self.served, self.fast, self.version
         default_model, field_adapter, bank = self.default_model, self.field_adapter, self.st.bank
         F, FL, SUP, REF, options, answer_routed = self._mods
@@ -172,6 +199,15 @@ class Service:
         ns = "mbnli" if model.startswith("mbnli") else "horopter"
         ext = req.horopter or req.mbnli
         opts = ext.model_dump(exclude_none=True) if ext else {}
+        if req.evidence is not None:               # top-level shorthand of horopter.evidence
+            short = req.evidence if isinstance(req.evidence, dict) else {"mode": req.evidence}
+            if "evidence" in opts and opts["evidence"] != short:
+                raise ServiceError(400, f"evidence given twice, differently: top-level {req.evidence!r} and "
+                                        f"{ns}.evidence {opts['evidence']!r}")
+            opts["evidence"] = short
+        bad = sorted(set(opts.get("evidence") or {}) - {"mode", "threshold"})
+        if bad:
+            raise ServiceError(400, f"evidence takes mode and threshold; unknown: {bad}")
         ev_mode = (opts.get("evidence") or {}).get("mode", "off")
         if ev_mode not in ("off", "chosen", "all"):
             raise ServiceError(400, "evidence.mode must be off, chosen or all")
@@ -201,14 +237,16 @@ class Service:
             if served[model] == "route" and routed:
                 rt = self.routing
                 rq = {q: rt.question(allq[q], st.tok, st.col.mq) for q in routed}
-                if rt.layout == "state":           # a fresh state per routed question
-                    st.use(rt.router)
-                    rp = st.answer_one_each([(F.router_state(state, allq[q]), rq[q][0]) for q in routed])
-                else:                              # the request's state, shared with the answer pass
-                    rr = {q: {"adapter": rt.router} for q in routed}
-                    rs = fast.answer(state, {q: rq[q][0] for q in routed}, rr, False) if fast is not None else \
-                        answer_routed(st, state, {q: rq[q][0] for q in routed}, rr, False)
-                    rp = [rs[q]["p"] for q in routed]
+                rp = []
+                for part in _chunks(routed, self.max_batch):
+                    if rt.layout == "state":       # a fresh state per routed question
+                        st.use(rt.router)
+                        rp += st.answer_one_each([(F.router_state(state, allq[q]), rq[q][0]) for q in part])
+                    else:                          # the request's state, shared with the answer pass
+                        rr = {q: {"adapter": rt.router} for q in part}
+                        rs = fast.answer(state, {q: rq[q][0] for q in part}, rr, False) if fast is not None else \
+                            answer_routed(st, state, {q: rq[q][0] for q in part}, rr, False)
+                        rp += [rs[q]["p"] for q in part]
                 for qid, r in zip(routed, rp):
                     probs = {f: float(x) for f, x in zip(rt.targets, r)}
                     best = max(probs, key=probs.get)
@@ -225,14 +263,27 @@ class Service:
                     route[qid] = {"adapter": ad, "p": 1.0, "router": None}
                 if qid in hidden:
                     route[qid]["own_spans"] = True
-            if fast is not None:
-                return route, fast.answer(state, allq, route, ev_arg)
-            return route, answer_routed(st, state, allq, route, ev_arg)
+            res = {}
+            for part in _chunks(allq, self.max_batch):   # passes over the same cached state
+                qp = {q: allq[q] for q in part}
+                res.update(fast.answer(state, qp, route, ev_arg) if fast is not None else
+                           answer_routed(st, state, qp, route, ev_arg))
+            return route, res
+
+        def guarded():
+            import torch
+            try:
+                return step()
+            except torch.cuda.OutOfMemoryError:
+                torch.cuda.empty_cache()
+                raise ServiceError(503, f"out of GPU memory answering {len(allq)} questions and fields"
+                                        + (f" in passes of {self.max_batch}" if self.max_batch else " in one pass")
+                                        + "; retry, or send fewer per request (the server stays up)") from None
 
         t_req = time.perf_counter()
         with self.lock:
             wait_ms = (time.perf_counter() - t_req) * 1000
-            route, res = fast.call(step) if fast is not None else step()
+            route, res = fast.call(guarded) if fast is not None else guarded()
         server_ms = (time.perf_counter() - t_req) * 1000
 
         def n_tok(text):

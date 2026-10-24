@@ -82,6 +82,11 @@ class Client:
         """Send a request body as is (any format the server accepts)."""
         return self._call("POST", ROUTES.get(route, route), body)
 
+    def tokenize(self, state, model=None):
+        """The state as the model reads it: state_text, state_tokens, limit, truncated, read_chars, offsets, state_id."""
+        body = {"state": state, **({"model": model or self.model} if (model or self.model) else {})}
+        return self._call("POST", "/v1/tokenize", body)
+
     def models(self):
         return self._call("GET", "/v1/models")["models"]
 
@@ -118,6 +123,14 @@ class Local:
         from .service import ServiceError
         try:
             return json.loads(json.dumps(self.service.decide(body, clairic=route == "clairic")))
+        except ServiceError as e:
+            raise HoropterError(e.status, e.detail) from None
+
+    def tokenize(self, state, model=None):
+        from .service import ServiceError
+        try:
+            return self.service.tokenize({"state": state, **({"model": model or self.model} if (model or self.model)
+                                                               else {})})
         except ServiceError as e:
             raise HoropterError(e.status, e.detail) from None
 

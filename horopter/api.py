@@ -7,11 +7,12 @@ Cloudflare's Clairic (typed fields extracted from a state), and one response sha
   model / answers / truncated / usage / state_text.
 - /v1/horopter is the same handler under our own name: questions and fields in one request, over one cached state.
 
-Question ids and field names share one `answers` object, so they must not collide. The extension block (relation,
+Question ids and field names share one `answers` object, so they must not collide. Unknown keys are refused (400,
+naming the key), never silently dropped. The extension block (relation,
 abstention, evidence, version) is `horopter` (or `mbnli` for the mbnli-3-beta* model names); `-strict` model names drop
 it and every other non-Jev key.
 """
-from typing import Any, Literal, Optional, Union
+from typing import Annotated, Any, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,37 +23,42 @@ class _Open(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
+class _Closed(BaseModel):
+    """Request objects: an unknown key is a 400 naming it (a misspelt option must not be dropped without a word)."""
+    model_config = ConfigDict(extra="forbid")
+
+
 # ------------------------------------------------------------------------------------------------- request
-class NoulQuestion(BaseModel):
+class NoulQuestion(_Closed):
     type: Literal["noul"]
     instructions: Optional[Text] = Field(None, description="The yes/no question. Missing: the question id is used.")
     criteria: Optional[dict[str, Text]] = Field(None, description="Optional descriptions of `true` and `false`.")
 
 
-class ChoiceQuestion(BaseModel):
+class ChoiceQuestion(_Closed):
     type: Literal["choice"]
     instructions: Optional[Text] = None
     criteria: dict[str, Text] = Field(..., description="Option name -> description; at least 2.")
 
 
-class ScoreQuestion(BaseModel):
+class ScoreQuestion(_Closed):
     type: Literal["score"]
     instructions: Optional[Text] = None
     criteria: list[Text] = Field(..., description="Ordered levels, lowest first; at least 2.")
 
 
-class BoxQuestion(BaseModel):
+class BoxQuestion(_Closed):
     type: Literal["box"]
     instructions: Optional[Text] = Field(None, description="Jev 1.14: locate something in an image. Reserved: this "
                                                            "model has no image input yet, and refuses box questions.")
 
 
-Question = Union[NoulQuestion, ChoiceQuestion, ScoreQuestion, BoxQuestion]
+Question = Annotated[Union[NoulQuestion, ChoiceQuestion, ScoreQuestion, BoxQuestion], Field(discriminator="type")]
 
 FieldType = Literal["text", "number", "date", "time", "datetime", "duration", "list", "estimate", "forecast"]
 
 
-class FieldSpec(BaseModel):
+class FieldSpec(_Closed):
     type: FieldType
     instructions: Optional[str] = Field(None, description="What the field should contain.")
     unit: Optional[str] = Field(None, description="Durations: seconds, minutes, hours, days, weeks, months, years.")
@@ -69,35 +75,34 @@ class FieldSpec(BaseModel):
     interval: Optional[str] = None
 
 
-class Asset(BaseModel):
+class Asset(_Closed):
     """Jev 1.14 image asset, referenced by its key in backticks from the state or instructions."""
     format: Literal["png", "jpg", "jpeg"]
     data_base64: str
     type: Optional[Literal["image"]] = None
 
 
-class Base64Image(BaseModel):
+class Base64Image(_Closed):
     content_type: str
     base64: str
 
 
-class Options(BaseModel):
+class Options(_Closed):
     include_quantiles: bool = False
     return_state_text: bool = False
     allow_truncation: Optional[bool] = Field(None, description="Read the first window of a too-long state instead of "
                                                                "refusing (default: true on Clairic routes, else false).")
 
 
-class Extensions(BaseModel):
+class Extensions(_Closed):
     """Horopter request options (also accepted under the key `mbnli`)."""
-    model_config = ConfigDict(extra="allow")
     evidence: Optional[dict[str, Any]] = Field(None, description='{"mode": "off" | "chosen" | "all", "threshold": '
                                                                  '0..1}: evidence spans per question answer.')
     allow_truncation: Optional[bool] = None
     debug: Optional[bool] = Field(None, description="Add routing and hidden-question details.")
 
 
-class DecideRequest(BaseModel):
+class DecideRequest(_Closed):
     model: Optional[str] = Field(None, description="A served model name (GET /v1/models); `clairic` maps to the "
                                                    "default model.")
     state: Union[str, dict, list] = Field("", description="Text, or JSON (rendered with sorted keys).")
@@ -110,6 +115,13 @@ class DecideRequest(BaseModel):
     options: Optional[Options] = None
     horopter: Optional[Extensions] = None
     mbnli: Optional[Extensions] = None
+    evidence: Optional[Union[Literal["off", "chosen", "all"], dict[str, Any]]] = Field(
+        None, description='Shorthand for horopter.evidence: a mode ("chosen") or the full object.')
+
+
+class TokenizeRequest(_Closed):
+    model: Optional[str] = Field(None, description="A served model name (all share one tokenizer); checked if given.")
+    state: Union[str, dict, list] = Field("", description="Text, or JSON (rendered with sorted keys), as in a request.")
 
 
 # ------------------------------------------------------------------------------------------------- response (docs)
@@ -147,6 +159,16 @@ class DecideResponse(_Open):
     truncated: Optional[bool] = None
     state_text: Optional[str] = None
     horopter: Optional[dict[str, Any]] = Field(None, description="version, state_id, timings (mbnli on mbnli-* names)")
+
+
+class TokenizeResponse(_Open):
+    state_text: str = Field(..., description="The rendered state: the text that span offsets index into.")
+    state_tokens: int = Field(..., description="Tokens in the whole rendered state.")
+    limit: int = Field(..., description="Tokens this model reads; a longer state is a 413 (or truncated on request).")
+    truncated: bool = Field(..., description="state_tokens > limit.")
+    read_chars: int = Field(..., description="Characters of state_text inside the window (all of it if not truncated).")
+    offsets: list[list[int]] = Field(..., description="[start, end) character offsets of each token in state_text.")
+    state_id: str = Field(..., description="The id decide() reports for this state (sha256 of state_text).")
 
 
 class WorkersAIResponse(_Open):
