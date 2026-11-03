@@ -115,6 +115,16 @@ def test_typed_hints():
     assert get({"type": "text", "instructions": "The IBAN"})["value"] == "DE89 3704 0044 0532 0130 00"
     assert get({"type": "text", "instructions": "The domain name"})["value"] == "shop.example.co.uk"
     assert get({"type": "text", "instructions": "The postal code"})["value"] == "W1U 6TY"
+    hint = lambda ins, name="f": F.hint_of(name, {"instructions": ins})   # noqa: E731
+    assert hint("The file name of the attachment") == (None, None)       # free text, not the person-name pattern
+    assert hint("The name of the attached file") == (None, None)
+    assert hint("", "package_name") == (None, None)
+    assert hint("The reviewer's handle") == (None, None)
+    assert hint("The contact email")[0] == F.HINTS[0][1]
+    assert hint("The name of the reviewer")[0] == F.NAME_RUN
+    assert hint("People to contact about the invoice")[0] == F.NAME_RUN
+    assert hint("The invoice number")[0] == F.HINTS[9][1]
+    assert hint("Who to email about the order")[0] == F.NAME_RUN
     note = "Meeting moved to the blue room, see you there."
     a = F.answer("f", {"type": "text", "instructions": "The phone number"}, note, words(note), [0.3] * 9, 0.95)
     assert a["value"] is None and "guess" not in a                        # nothing phone-shaped: null, no guess

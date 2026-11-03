@@ -70,18 +70,33 @@ HINTS = [
      _ADDR, "addr"),
     (r"invoice|order|tracking|serial|reference|\bref\b|\bpo\b|purchase order|ticket|account|\bids?\b|\bcodes?\b|"
      r"\bsku\b|confirmation|booking", r"\b(?=[A-Za-z0-9/_-]*\d)[A-Za-z0-9][A-Za-z0-9/_-]{2,}\b", None),
+    # free-text kinds with no pattern: the value is the support span itself (E56), and the person-name pattern stays off
+    (r"file ?names?|\bfiles?\b|attach(?:ment|ed)|packages?|dependenc(?:y|ies)|librar(?:y|ies)|\bmodules?\b|"
+     r"\bhandles?\b|user ?names?|\bpaths?\b|director(?:y|ies)|folders?|\bversions?\b", None, None),
     (r"first name|given name|forename", NAME_RUN, "first"),
     (r"family name|last name|surname", NAME_RUN, "last"),
     (r"\bnames?\b|people|\bcontacts?\b|\bwho\b", NAME_RUN, None),
 ]
+_WEAK = len(HINTS) - 1      # "name" / "contact" only modify a kind named next to them: "file name", "contact email"
+_JOIN = re.compile(r"\s+(?:(?:of|for)\s+(?:(?:the|a|an|this|that)\s+)?(?:\w+\s+)?)?")
 
 
 def hint_of(name, spec):
-    """-> (pattern, post) of the hint whose keyword comes first in the instructions (else the name), or None."""
+    """-> (pattern, post) of the hint whose keyword comes first in the instructions (else the name), or None. A weak
+    keyword ("name", "contact") next to another kind's keyword ("file name", "contact email", "name of the attached
+    file") gives way to that kind. (None, None) is a free-text kind: support spans, no pattern."""
     for text in (spec.get("instructions") or "", re.sub(r"[_.\-]+", " ", name)):
-        hits = [(m.start(), -len(m.group(0)), i) for i, (kw, _, _) in enumerate(HINTS) for m in [re.search(kw, text.lower())] if m]
-        if hits:
-            return HINTS[min(hits)[2]][1:]
+        text = text.lower()
+        found = [(m.start(), m.end(), i) for i, (kw, _, _) in enumerate(HINTS) for m in [re.search(kw, text)] if m]
+        if not found:
+            continue
+        a, b, i = min(found, key=lambda h: (h[0], h[0] - h[1]))
+        if i == _WEAK:
+            for a2, b2, j in found:
+                if j != _WEAK and (_JOIN.fullmatch(text[b:a2]) or _JOIN.fullmatch(text[b2:a])):
+                    i = j
+                    break
+        return HINTS[i][1:]
     return None
 
 

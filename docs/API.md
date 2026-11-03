@@ -185,7 +185,7 @@ How it works: each field becomes a hidden yes/no question ("Does the text give t
 
 Known limits (beta):
 - **Free-text fields can come back cut short.** These are text fields with no type pattern, such as a file name or a version tag, where the value is the evidence span itself. The models tend to leave punctuation inside a value out of the span, so `quarterly.report.final.pdf` can come back as `quarterly.report.final`, or as `quarterly`. Sometimes no value comes back at all. Fields with a type pattern (email, phone, URL, IBAN, IDs, names, addresses, numbers, dates) aren't affected. This is a training limit, and it is on the roadmap.
-- **Pattern choice goes by keywords in the instructions,** and the earliest keyword wins. "The file name of the attachment" picks up the person-name pattern because it contains "name"; "The contact email" does too, because "contact" comes before "email". Lead with the kind of value: "the email address to contact", "the attached document".
+- **Pattern choice goes by keywords in the instructions,** and the earliest keyword wins. "Name" and "contact" give way to a kind of value named next to them: "The file name of the attachment", "the name of the attached file" and "package_name" are free text, and "The contact email" uses the email pattern. Further apart, the earliest keyword still wins ("People to contact about the invoice" is about people), so lead with the kind of value.
 
 ## Step 5: questions and fields together
 

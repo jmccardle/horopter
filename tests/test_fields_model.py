@@ -15,6 +15,7 @@ MODEL = os.environ.get("HOROPTER_TEST_MODEL")
 STATE = ("Hi team, the draft is attached as quarterly.report.final.pdf. Questions to support@homecomfi.toronto.ca "
          "please, or call 0161 496 0000. The total due is $1,240.50 by 14 November 2026.")
 FIELDS = {"file": {"type": "text", "instructions": "The attached document"},
+          "file_name": {"type": "text", "instructions": "The file name of the attachment"},
           "email": {"type": "text", "instructions": "The support email address"},
           "phone": {"type": "text", "instructions": "The phone number"},
           "total": {"type": "number", "instructions": "The total due"},
@@ -55,6 +56,13 @@ def test_values(r):
 def test_free_text_value_kept_whole_across_dots(r):
     # no type pattern: the value is the support span itself
     assert r["answers"]["file"]["value"] == "quarterly.report.final.pdf"
+
+
+@pytest.mark.xfail(reason="as above: needs an extract adapter trained on inner punctuation (E56 extract_punct)",
+                   strict=False)
+def test_file_name_field_is_free_text(r):
+    # "name" in "file name" no longer selects the person-name pattern; the value is the support span
+    assert r["answers"]["file_name"]["value"] == "quarterly.report.final.pdf"
 
 
 def test_absent_value_is_null(r):
