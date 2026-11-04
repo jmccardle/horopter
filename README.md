@@ -4,7 +4,7 @@
 
 > *Horopter*: the set of points that both eyes see as one.
 
-Code: MIT (`LICENSE`). Weights, data recipe and docs: CC BY-NC-SA 4.0 (research, non-commercial). Weights: [horopter-0.4B](https://huggingface.co/jmccardle/horopter-0.4B), [horopter-1B](https://huggingface.co/jmccardle/horopter-1B) (first release, 2026-10-20).
+Code: MIT (`LICENSE`). Weights, data recipe and docs: CC BY-NC-SA 4.0 (research, non-commercial). Weights: [horopter-0.4B](https://huggingface.co/jmccardle/horopter-0.4B), [horopter-1B](https://huggingface.co/jmccardle/horopter-1B) (beta-3, 2026-11-04).
 
 Horopter is an encoder-only *decision model*. Give it a **state** (a document, a record or a JSON object) and typed **questions** about it (yes/no, choose one, score on a scale). It answers them in one pass, and for every answer it also returns:
 
@@ -18,25 +18,31 @@ The state is encoded once, without seeing any question, and cached. Each questio
 
 Built on [Ettin](https://huggingface.co/jhu-clsp/ettin-encoder-1b) encoders (400M and 1B), from Fight Fire with Fire Robotics.
 
-## Status
+## Stat## Status
 
-First release, **2026-10-20**: [horopter-0.4B](https://huggingface.co/jmccardle/horopter-0.4B) (`horopter-0.4b-20261020`) and [horopter-1B](https://huggingface.co/jmccardle/horopter-1B) (`horopter-1b-20261020`). Router + adapters, one pass:
+Beta-3, **2026-11-04**: [horopter-0.4B](https://huggingface.co/jmccardle/horopter-0.4B) (`horopter-0.4b-20261104`) and [horopter-1B](https://huggingface.co/jmccardle/horopter-1B) (`horopter-1b-20261104`). Router + adapters, one pass:
 
-| | Horopter 1B | Horopter 0.4B | mbnli-3 beta 1B (internal) | best 4–9B decoder we tested |
+| | Horopter 1B | Horopter 0.4B | horopter-1b-20261020 (first release) | best 4–9B decoder we tested |
 |---|---|---|---|---|
-| grounding (LLM-AggreFact balanced accuracy) | 75.7 | 74.8 | 75.7 | 77.2 |
-| 4-way relation (macro-F1) | 78.6 | 76.6 | 78.6 | 75.3 |
-| multi-step policy decisions (JevBench hard) | 40.5 | 36.0 | 44.1 | 64.0 |
-| generated policies, one pass (prose) | 97.7 | 95.0 | 53.6 | |
+| grounding (LLM-AggreFact balanced accuracy) | 75.2 | 75.0 | 75.7 | 77.2 |
+| 4-way relation (macro-F1) | 78.9 | 77.0 | 78.6 | 75.3 |
+| multi-step policy decisions (JevBench hard) | 40.5 | 39.6 | 40.5 | 64.0 |
+| real rule text, ShARC 4-way (yes / no / irrelevant / more info) | 82.3 | 78.6 | 54.3 | 64.8 (Qwen3-30B-A3B) |
 
-The full tables and limits are in the model cards. Grounding and relation are level with 4–9B decoders. Multi-step policy decisions on real text trail them by about 20 points. This release has rule-application data with always-determined answers, so it rarely says "more information needed" on real rule text.
+The full tables and limits are in the model cards.
+- Grounding and relation are level with 4–9B decoders.
+- Multi-step policy decisions on real text trail them by about 20 points.
+- Beta-3 adds rule-application data whose outcome is "more information needed" or "does not apply". The first release almost never gave those answers on real rule text.
+- The model repos also bundle an `extract` adapter for `fields` requests.
 
-## Layout
+The first release (2026-10-20) stays available as the HF revisions `horopter-0.4b-20261020` and `horopter-1b-20261020`, e.g. `horopter.load("jmccardle/horopter-1B@horopter-1b-20261020")`. Recipes: [beta-2](training/recipes/beta2.md), [beta-3](training/recipes/beta3.md).
+
+ut
 
 ```
 horopter/     model, packing, losses, runtime (adapters), evidence, abstention, fields (typed extraction), api + server (wire format)
 horopter/fast/  fast path: state cache, CUDA graphs, block-sparse state attention, all adapters in one pass
-training/     joint trainer, adapter / evidence trainers, abstention head fit, data builders, recipes/beta2.md
+training/     joint trainer, adapter / evidence trainers, abstention head fit, data builders, recipes/beta2.md and beta3.md
 eval/         benchmark scorers (E37 bench, E40 rule evals) and the HTTP client
 scripts/      export_hf.py: training checkpoint -> HF layout
 tests/        parity against the research code; fast path against the release path
